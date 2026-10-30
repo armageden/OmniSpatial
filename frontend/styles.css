@@ -1,0 +1,178 @@
+/* OmniSpatial Augmented Reality HUD — Meta Horizon OS & Meta AI Design System */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --meta-blue: #0866FF;
+  --meta-blue-light: #0081FB;
+  --meta-blue-hover: #0056D6;
+  --meta-cyan: #00C6FF;
+  --meta-purple: #7000FF;
+  --meta-gradient: linear-gradient(135deg, #0866FF 0%, #0081FB 45%, #00C6FF 100%);
+  --meta-gradient-glow: linear-gradient(135deg, rgba(8, 102, 255, 0.4) 0%, rgba(0, 198, 255, 0.4) 100%);
+  --meta-ai-badge: linear-gradient(135deg, rgba(8, 102, 255, 0.15) 0%, rgba(112, 0, 255, 0.15) 100%);
+  
+  --meta-bg: #050811;
+  --meta-bg-elevated: #090e1c;
+  --meta-surface: rgba(13, 20, 36, 0.78);
+  --meta-surface-card: rgba(15, 23, 42, 0.72);
+  --meta-border: rgba(56, 139, 253, 0.22);
+  --meta-border-subtle: rgba(255, 255, 255, 0.08);
+  --meta-border-focus: rgba(0, 198, 255, 0.5);
+  
+  --meta-text-primary: #F8FAFC;
+  --meta-text-secondary: #94A3B8;
+  --meta-text-muted: #64748B;
+  
+  --meta-emerald: #00D26A;
+  --meta-emerald-glow: rgba(0, 210, 106, 0.25);
+  --meta-amber: #FFB020;
+  --meta-amber-glow: rgba(255, 176, 32, 0.25);
+  --meta-rose: #FF3B30;
+  --meta-rose-glow: rgba(255, 59, 48, 0.25);
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--meta-bg);
+  background-image: 
+    radial-gradient(circle at 50% 0%, rgba(8, 102, 255, 0.12) 0%, transparent 60%),
+    radial-gradient(circle at 10% 90%, rgba(0, 198, 255, 0.05) 0%, transparent 50%),
+    radial-gradient(circle at 90% 80%, rgba(112, 0, 255, 0.05) 0%, transparent 50%);
+  background-attachment: fixed;
+  color: var(--meta-text-primary);
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.font-mono {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+}
+
+/* Glassmorphism Surface Base */
+.meta-glass-panel {
+  background: var(--meta-surface);
+  backdrop-filter: blur(24px) saturate(190%);
+  -webkit-backdrop-filter: blur(24px) saturate(190%);
+  border: 1px solid var(--meta-border);
+  box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.65), 0 0 0 1px var(--meta-border-subtle) inset;
+}
+
+.meta-glass-subtle {
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--meta-border-subtle);
+}
+
+/* Meta Brand Infinity & Gradient Text */
+.meta-gradient-text {
+  background: var(--meta-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.meta-ai-pill {
+  background: var(--meta-ai-badge);
+  border: 1px solid rgba(8, 102, 255, 0.35);
+  box-shadow: 0 0 12px rgba(8, 102, 255, 0.15);
+}
+
+/* Primary Meta Button */
+.meta-btn-primary {
+  background: var(--meta-gradient);
+  color: #FFFFFF;
+  box-shadow: 0 4px 16px 0 rgba(8, 102, 255, 0.4), 0 1px 2px 0 rgba(0, 0, 0, 0.2);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.meta-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px 0 rgba(8, 102, 255, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.2) inset;
+}
+.meta-btn-primary:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+/* Secondary Meta Horizon Glass Pill */
+.meta-pill-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--meta-text-primary);
+  transition: all 0.18s ease;
+}
+.meta-pill-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(8, 102, 255, 0.4);
+  color: #FFFFFF;
+  transform: translateY(-1px);
+}
+.meta-pill-btn:active {
+  transform: translateY(0) scale(0.97);
+}
+
+/* HUD Canvas Frame & Spatial Reticles */
+.spatial-viewport-frame {
+  position: relative;
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(8, 102, 255, 0.2);
+}
+
+.hud-corner {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-color: var(--meta-cyan);
+  pointer-events: none;
+  z-index: 20;
+  opacity: 0.8;
+}
+.hud-corner-tl { top: 10px; left: 10px; border-top: 2px solid; border-left: 2px solid; }
+.hud-corner-tr { top: 10px; right: 10px; border-top: 2px solid; border-right: 2px solid; }
+.hud-corner-bl { bottom: 10px; left: 10px; border-bottom: 2px solid; border-left: 2px solid; }
+.hud-corner-br { bottom: 10px; right: 10px; border-bottom: 2px solid; border-right: 2px solid; }
+
+/* Subtle Holographic Grid Scanline */
+.hologram-grid-bg {
+  background-image: 
+    linear-gradient(rgba(8, 102, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(8, 102, 255, 0.06) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Animations */
+@keyframes meta-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(0.96); }
+}
+
+.animate-meta-pulse {
+  animation: meta-pulse 2.2s infinite ease-in-out;
+}
+
+@keyframes radar-glow {
+  0% { box-shadow: 0 0 0 0 rgba(8, 102, 255, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(8, 102, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(8, 102, 255, 0); }
+}
+
+.animate-radar-glow {
+  animation: radar-glow 2s infinite cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Custom Ergonomic Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--meta-bg);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(56, 139, 253, 0.25);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(8, 102, 255, 0.45);
+}
