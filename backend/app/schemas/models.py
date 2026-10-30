@@ -1,0 +1,62 @@
+from pydantic import BaseModel, Field
+from typing import List, Dict, Any, Optional
+
+class Point(BaseModel):
+    x: float
+    y: float
+
+class BoundingBox(BaseModel):
+    x_min: float
+    y_min: float
+    x_max: float
+    y_max: float
+
+class SegmentedObject(BaseModel):
+    id: str
+    label: str
+    confidence: float
+    bbox: BoundingBox
+    polygon: List[Point] = Field(default_factory=list)
+    attributes: Dict[str, Any] = Field(default_factory=dict)
+    area: Optional[float] = None
+    centroid: Optional[Point] = None
+    is_normalized: bool = False
+
+class TaskStep(BaseModel):
+    step_number: int
+    title: str
+    description: str
+    target_components: List[str]
+    verification_criteria: str
+    status: str = "pending" # pending | in_progress | verified | failed
+
+class VerificationResult(BaseModel):
+    step_number: int
+    is_verified: bool
+    confidence: float
+    feedback: str
+    detected_anomalies: List[str] = Field(default_factory=list)
+    suggested_action: Optional[str] = None
+
+class FrameAnalysisPayload(BaseModel):
+    frame_id: int
+    timestamp: float
+    image_base64: str
+    active_step: int = 1
+    width: Optional[int] = None
+    height: Optional[int] = None
+    normalize: bool = False
+    smooth: bool = True
+    action: Optional[str] = None
+    trigger_verify: bool = False
+    custom_prompt: Optional[str] = None
+
+class StreamActionRequest(BaseModel):
+    action: str # verify_step | next_step | prev_step | reset_workflow | set_step
+    step_number: Optional[int] = None
+
+class TargetImageResponse(BaseModel):
+    step_number: int
+    image_data_url: str
+    source: str = "muse_image_1.0"
+    is_cached: bool = False
