@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Non-blocking advisory docs integrity check on pre-commit
+# Always exits 0 to never block developer commits unexpectedly
+
+echo "📋 [Pre-Commit Advisory] Checking documentation integrity..."
+if command -v python3 >/dev/null 2>&1; then
+    if [ -f "scripts/docs_check.py" ]; then
+        python3 scripts/docs_check.py || {
+            echo "⚠️ [Advisory Notice] Documentation validator detected warnings/errors."
+            echo "⚠️ Please review and sync docs before submitting PRs or finalizing tasks."
+        }
+    fi
+fi
+
+exit 0
