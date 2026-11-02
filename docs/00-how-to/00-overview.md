@@ -16,3 +16,4 @@ Read this when executing common modification patterns, adding new task verificat
 | [run-local-simulation.md](./run-local-simulation.md) | Running the end-to-end client and server in offline mock simulation mode |
 | [deploy-modal-gpu-worker.md](./deploy-modal-gpu-worker.md) | Deploying and testing the serverless GPU pipeline on Modal |
 | [record-winning-demo-video.md](./record-winning-demo-video.md) | Timestamped 3-minute video recording runbook and Devpost submission package |
+| [remediation-runbook.md](./remediation-runbook.md) | Maps audit findings to files/functions and verification commands |

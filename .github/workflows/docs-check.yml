@@ -21,6 +21,14 @@ jobs:
         run: |
           python3 -m py_compile backend/app/*.py backend/app/*/*.py scripts/docs_check.py
 
+      - name: Install Dependencies
+        run: |
+          python3 -m pip install -r backend/requirements.txt
+
+      - name: Run Tests
+        run: |
+          PYTHONPATH=backend python3 -m unittest discover -s backend/tests -v
+
       - name: Validate Documentation Integrity
         run: |
           python3 scripts/docs_check.py

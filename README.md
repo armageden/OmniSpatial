@@ -20,7 +20,7 @@
 
 ```mermaid
 flowchart LR
-    subgraph Client["Frontend HUD (React / Canvas)"]
+    subgraph Client["Frontend HUD (HTML5 Canvas)"]
         A[Webcam / Mobile Video Stream] --> B[Frame Capture & Downsample]
         B --> C[WebSocket Client]
         D[Interactive Mask & HUD Overlay] <-- C

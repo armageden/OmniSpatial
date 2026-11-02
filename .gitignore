@@ -10,17 +10,39 @@ __pycache__/
 *.so
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
 
 # Virtual environments
 .venv/
 venv/
 ENV/
 env/
+backend/.venv/
+
+# Tooling / agent state
+.commandcode/
 
 # Logs & temp
 *.log
 *.tmp
+*.swp
+*.swo
+
+# IDE / editor
+.vscode/
+.idea/
+*.iml
 
 # OS files
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# Build / dist
+dist/
+build/
+*.egg-info/

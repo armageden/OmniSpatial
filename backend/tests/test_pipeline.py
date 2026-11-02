@@ -1,6 +1,8 @@
 import unittest
 import numpy as np
 import cv2
+import json
+from unittest.mock import patch, AsyncMock, MagicMock
 from pycocotools import mask as mask_utils
 from fastapi.testclient import TestClient
 from app.main import app
@@ -180,6 +182,95 @@ class TestOmniSpatialPipeline(unittest.TestCase):
             self.assertLessEqual(pt.x, 150.0)
             self.assertGreaterEqual(pt.y, 60.0)
             self.assertLessEqual(pt.y, 160.0)
+
+    def test_rle_mask_production_path_decodes_real_contour(self):
+        # Build a real compressed RLE mask for a 40x40 circle
+        mask_raw = np.zeros((40, 40), dtype=np.uint8)
+        cv2.circle(mask_raw, (20, 20), 12, 1, -1)
+        rle = mask_utils.encode(np.asfortranarray(mask_raw))
+        counts_str = rle["counts"].decode("utf-8")
+
+        # SAM 3.1 style response text: box with w/h plus mask with x/y/data
+        sam_text = (
+            f"<|box;x1=10.0;y1=20.0;x2=50.0;y2=60.0;w=40;h=40|>"
+            f"<|mask;x=10.0;y=20.0;data={counts_str}|>"
+        )
+        fake_response = MagicMock()
+        fake_response.status_code = 200
+        fake_response.raise_for_status = MagicMock()
+        fake_response.json.return_value = {
+            "output": [{"content": [{"text": sam_text}]}]
+        }
+
+        async def run():
+            with patch("httpx.AsyncClient") as mock_client_cls:
+                mock_client = MagicMock()
+                mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+                mock_client.__aexit__ = AsyncMock(return_value=None)
+                mock_client.post = AsyncMock(return_value=fake_response)
+                mock_client_cls.return_value = mock_client
+
+                # Force live mode
+                original = meta_client.is_mock
+                meta_client.is_mock = False
+                try:
+                    segs = await meta_client.segment_frame_sam(
+                        image_base64="data:image/jpeg;base64,AAAA",
+                        target_label="components",
+                        target_components=["chip"],
+                        allow_fallback=True,
+                    )
+                finally:
+                    meta_client.is_mock = original
+            return segs
+
+        import asyncio
+        segs = asyncio.run(run())
+        self.assertEqual(len(segs), 1)
+        self.assertTrue(segs[0].attributes.get("has_rle_mask"))
+        # Polygon should be a real contour, not the 8-point octagon fallback
+        self.assertNotEqual(len(segs[0].polygon), 8)
+
+    def test_decode_rle_mask_offset_params(self):
+        mask_raw = np.zeros((40, 40), dtype=np.uint8)
+        cv2.circle(mask_raw, (20, 20), 12, 1, -1)
+        rle = mask_utils.encode(np.asfortranarray(mask_raw))
+        counts_str = rle["counts"].decode("utf-8")
+        mask_str = f"40,40,{counts_str}"
+        bbox = BoundingBox(x_min=100.0, y_min=200.0, x_max=140.0, y_max=240.0)
+        points = meta_client.decode_rle_mask(mask_str, bbox, offset_x=5.0, offset_y=7.0)
+        self.assertGreater(len(points), 4)
+        for pt in points:
+            self.assertGreaterEqual(pt.x, 5.0)
+            self.assertLessEqual(pt.x, 45.0)
+
+    def test_trace_binary_mask_circle(self):
+        mask = np.zeros((40, 40), dtype=np.uint8)
+        cv2.circle(mask, (20, 20), 12, 1, -1)
+        pts = sam_service.trace_binary_mask(mask)
+        self.assertGreater(len(pts), 10)
+
+    def test_smoothing_bounds(self):
+        square = [Point(x=0.0, y=0.0), Point(x=10.0, y=0.0), Point(x=10.0, y=10.0), Point(x=0.0, y=10.0)]
+        # extreme values clamped, should not crash
+        out = sam_service.smooth_polygon(square, iterations=100, closed=True)
+        self.assertLessEqual(len(out), len(square) * (2 ** 5))
+        simplified = sam_service.simplify_polygon(square, epsilon=1e9)
+        self.assertGreaterEqual(len(simplified), 3)
+
+    def test_websocket_smoke(self):
+        from starlette.testclient import TestClient as STC
+        client = TestClient(app)
+        with client.websocket_connect("/ws/stream") as ws:
+            ws.send_text(json.dumps({"action": "next_step"}))
+            msg = ws.receive_json()
+            self.assertEqual(msg["type"], "step_updated")
+            ws.send_text(json.dumps({"action": "set_step", "step_number": "bad"}))
+            err = ws.receive_json()
+            self.assertEqual(err["type"], "error")
+            ws.send_text(json.dumps({"image_base64": "AAAA", "frame_id": 1}))
+            resp = ws.receive_json()
+            self.assertIn(resp["type"], ("frame_analysis", "error"))
 
     def test_modal_frame_processing_function(self):
         from app.services.modal_app import process_frame_gpu

@@ -43,11 +43,18 @@ class ReasoningEngine:
     def advance_step(self) -> TaskStep:
         """Advance to the next assembly step."""
         if self.current_step_idx + 1 < len(self.steps):
-            self.steps[self.current_step_idx].status = "verified"
+            # Only mark verified if not explicitly failed; manual navigation implies completion
+            if self.steps[self.current_step_idx].status != "failed":
+                self.steps[self.current_step_idx].status = "verified"
             self.current_step_idx += 1
             self.steps[self.current_step_idx].status = "in_progress"
             self.last_verification = None
         return self.get_active_step()
+
+    def mark_verified(self, step_number: int) -> None:
+        """Mark a step verified (only via successful verification)."""
+        idx = max(0, min(step_number - 1, len(self.steps) - 1))
+        self.steps[idx].status = "verified"
 
     def previous_step(self) -> TaskStep:
         """Navigate back to the prior step."""

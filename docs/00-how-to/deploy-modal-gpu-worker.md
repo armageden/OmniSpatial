@@ -20,7 +20,7 @@ Link your Modal account:
 ```bash
 modal setup
 ```
-Or export your API tokens in `backend/.env`:
+Or export your API tokens in backend/.env (generated from `backend/.env.example`):
 ```bash
 export MODAL_TOKEN_ID="your_token_id"
 export MODAL_TOKEN_SECRET="your_token_secret"

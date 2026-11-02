@@ -14,3 +14,4 @@ Read this to understand historical design choices, technology tradeoffs, and arc
 | [adr-002-sam31-zero-shot-spatial-pipeline.md](./adr-002-sam31-zero-shot-spatial-pipeline.md) | Choice of SAM 3.1 zero-shot segmentation rather than custom fine-tuned object detection |
 | [adr-003-modal-serverless-gpu-offload.md](./adr-003-modal-serverless-gpu-offload.md) | Adoption of Modal serverless GPUs for heavy vision processing and burst workloads |
 | [adr-004-dual-loop-streaming-and-backpressure.md](./adr-004-dual-loop-streaming-and-backpressure.md) | Dual-loop decoupled streaming architecture and client-side backpressure control |
+| [adr-005-remediation-and-hardening.md](./adr-005-remediation-and-hardening.md) | Remediation and hardening decisions from the full code audit |

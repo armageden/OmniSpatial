@@ -6,7 +6,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.services.sam_service import sam_service
-from app.services.reasoning_engine import reasoning_engine
+from app.services.reasoning_engine import reasoning_engine, ReasoningEngine
 from app.services.meta_client import meta_client
 from app.schemas.models import TargetImageResponse, StreamActionRequest
 
@@ -15,10 +15,11 @@ logger = logging.getLogger("omnispatial")
 
 app = FastAPI(title=settings.app_name, debug=settings.debug)
 
+_cors_origins = [o.strip() for o in settings.cors_allowed_origins.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials="*" not in _cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -81,7 +82,10 @@ async def websocket_stream_endpoint(websocket: WebSocket):
     """
     await websocket.accept()
     logger.info("Client connected to OmniSpatial dual-loop stream.")
-    
+
+    # Per-connection reasoning state (isolates concurrent clients)
+    reasoning_engine = ReasoningEngine()
+
     # Track any pending verification background task to avoid overlapping calls
     verification_task: Optional[asyncio.Task] = None
 
@@ -106,7 +110,17 @@ async def websocket_stream_endpoint(websocket: WebSocket):
     try:
         while True:
             data_text = await websocket.receive_text()
-            payload = json.loads(data_text)
+            if len(data_text) > 1_000_000:
+                await websocket.send_json({"type": "error", "message": "message too large"})
+                continue
+            try:
+                payload = json.loads(data_text)
+            except (json.JSONDecodeError, ValueError):
+                await websocket.send_json({"type": "error", "message": "invalid JSON"})
+                continue
+            if not isinstance(payload, dict):
+                await websocket.send_json({"type": "error", "message": "payload must be object"})
+                continue
 
             action = payload.get("action")
             # Handle control actions
@@ -123,7 +137,11 @@ async def websocket_stream_endpoint(websocket: WebSocket):
                 await websocket.send_json({"type": "step_updated", "active_step": active.model_dump()})
                 continue
             elif action == "set_step":
-                num = int(payload.get("step_number", 1))
+                try:
+                    num = int(payload.get("step_number", 1))
+                except (ValueError, TypeError):
+                    await websocket.send_json({"type": "error", "message": "invalid step_number"})
+                    continue
                 active = reasoning_engine.set_step(num)
                 await websocket.send_json({"type": "step_updated", "active_step": active.model_dump()})
                 continue
@@ -138,6 +156,9 @@ async def websocket_stream_endpoint(websocket: WebSocket):
             allow_fallback = bool(payload.get("allow_fallback", False)) or meta_client.is_mock
 
             if not image_base64:
+                continue
+            if len(image_base64) > 500_000:
+                await websocket.send_json({"type": "error", "message": "image payload too large"})
                 continue
 
             active_step = reasoning_engine.get_active_step()
@@ -194,3 +215,10 @@ async def websocket_stream_endpoint(websocket: WebSocket):
             await websocket.close()
         except Exception:
             pass
+    finally:
+        if verification_task is not None and not verification_task.done():
+            verification_task.cancel()
+            try:
+                await verification_task
+            except (asyncio.CancelledError, Exception):
+                pass

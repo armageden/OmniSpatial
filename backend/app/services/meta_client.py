@@ -113,7 +113,7 @@ class MetaModelAPIClient:
             Point(x=round(x1, 2), y=round(y1 + dy, 2))
         ]
 
-    def decode_rle_mask(self, mask_str: str, bbox: BoundingBox) -> List[Point]:
+    def decode_rle_mask(self, mask_str: str, bbox: BoundingBox, offset_x: Optional[float] = None, offset_y: Optional[float] = None) -> List[Point]:
         """
         Decodes SAM 3.1 Run-Length Encoded (RLE) string ('H,W,COUNTS') into a list of Point
         polygon vertices aligned with image pixel coordinates using pycocotools and OpenCV.
@@ -146,8 +146,10 @@ class MetaModelAPIClient:
             for pt in largest:
                 px = float(pt[0][0])
                 py = float(pt[0][1])
-                # Offset local mask patch coordinates to full image space using bbox origin
-                points.append(Point(x=round(bbox.x_min + px, 2), y=round(bbox.y_min + py, 2)))
+                origin_x = bbox.x_min if offset_x is None else offset_x
+                origin_y = bbox.y_min if offset_y is None else offset_y
+                # Offset local mask patch coordinates to full image space using patch origin
+                points.append(Point(x=round(origin_x + px, 2), y=round(origin_y + py, 2)))
             return points
         except Exception as e:
             logger.warning(f"SAM 3.1 RLE mask decoding encountered: {e}. Falling back to bounding box polygon.")
@@ -203,11 +205,24 @@ class MetaModelAPIClient:
 
                             bbox = BoundingBox(x_min=x1, y_min=y1, x_max=x2, y_max=y2)
                             mask_data = match.group("data")
+                            box_w = match.group("w")
+                            box_h = match.group("h")
+                            mask_x = match.group("mx")
+                            mask_y = match.group("my")
                             has_real_mask = False
 
-                            if mask_data:
-                                polygon = self.decode_rle_mask(mask_data, bbox)
-                                has_real_mask = True
+                            if mask_data and box_w and box_h:
+                                try:
+                                    h_int = int(float(box_h))
+                                    w_int = int(float(box_w))
+                                    mask_str = f"{h_int},{w_int},{mask_data}"
+                                    off_x = float(mask_x) if mask_x is not None else bbox.x_min
+                                    off_y = float(mask_y) if mask_y is not None else bbox.y_min
+                                    polygon = self.decode_rle_mask(mask_str, bbox, offset_x=off_x, offset_y=off_y)
+                                    has_real_mask = True
+                                except (ValueError, TypeError):
+                                    polygon = self._fallback_octagon_polygon(bbox)
+                                    has_real_mask = False
                             else:
                                 polygon = self._fallback_octagon_polygon(bbox)
 

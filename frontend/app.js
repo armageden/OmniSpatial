@@ -30,6 +30,11 @@
   const clearPromptBtn = document.getElementById("clearPromptBtn");
   const presetBtns = document.querySelectorAll(".preset-btn");
 
+  // Configuration (overridable via window.OMNISPATIAL_API_BASE)
+  const API_BASE = (window.OMNISPATIAL_API_BASE || "http://localhost:8000").replace(/\/$/, "");
+  const WS_BASE = API_BASE.replace(/^http/, "ws");
+  const SEGMENT_COLORS = ["#00C6FF", "#00D26A", "#A78BFA", "#F59E0B", "#F472B6", "#38BDF8"];
+
   // State Management
   let isStreaming = true;
   let isAwaitingResponse = false;
@@ -45,7 +50,7 @@
   let currentTargetImageElement = null;
   let audioContext = null;
   let currentCustomPrompt = "";
-
+  let reconnectDelay = 2000;
   // Offscreen canvas for frame capture & downsampling
   const captureCanvas = document.createElement("canvas");
   const captureCtx = captureCanvas.getContext("2d");
@@ -135,7 +140,7 @@
   // Load Synthesized Perspective Target from API
   async function loadTargetBlueprint(stepNum) {
     try {
-      const resp = await fetch(`http://localhost:8000/api/steps/${stepNum}/target-image`);
+      const resp = await fetch(`${API_BASE}/api/steps/${stepNum}/target-image`);
       if (resp.ok) {
         const data = await resp.json();
         targetBlueprintImg.src = data.image_data_url;
@@ -243,6 +248,15 @@
     }, 1200);
   }
 
+  function escapeHtml(value) {
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
   function updateLegend(segments) {
     if (!segmentsLegend) return;
     let html = '<span class="text-slate-400 font-medium text-[11px]">Active SAM 3.1 Targets:</span>';
@@ -250,10 +264,12 @@
       const pct = Math.round((seg.confidence || 0.95) * 100);
       const isRle = seg.attributes && seg.attributes.has_rle_mask;
       const rleBadge = isRle ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono font-semibold">RLE CONTOUR</span>' : '';
+      const safeColor = escapeHtml(seg.color || "#94A3B8");
+      const safeLabel = escapeHtml(seg.label || "");
       html += `
         <div class="flex items-center gap-2">
-          <span class="w-2.5 h-2.5 rounded-full" style="background-color: ${seg.color}"></span>
-          <span class="text-slate-300 font-mono text-[11px]">${seg.label} (${pct}%)</span>
+          <span class="w-2.5 h-2.5 rounded-full" style="background-color: ${safeColor}"></span>
+          <span class="text-slate-300 font-mono text-[11px]">${safeLabel} (${pct}%)</span>
           ${rleBadge}
         </div>
       `;
@@ -295,10 +311,11 @@
     if (ws && ws.readyState === WebSocket.OPEN) return;
 
     try {
-      ws = new WebSocket("ws://localhost:8000/ws/stream");
+      ws = new WebSocket(`${WS_BASE}/ws/stream`);
 
       ws.onopen = () => {
         console.log("OmniSpatial dual-loop WebSocket connected");
+        reconnectDelay = 2000;
         connectionStatus.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Stream Active';
         connectionStatus.className = "flex items-center gap-2 text-xs px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
         if (!streamInterval) {
@@ -311,7 +328,19 @@
         const latencyMs = Math.round(performance.now() - lastFrameSendTime);
         streamLatencyBadge.textContent = `Latency: ~${latencyMs}ms`;
 
-        const data = JSON.parse(event.data);
+        let data;
+        try {
+          data = JSON.parse(event.data);
+        } catch (e) {
+          console.warn("Invalid WebSocket payload:", e);
+          return;
+        }
+        if (!data || typeof data !== "object") return;
+
+        if (data.type === "error") {
+          console.warn("Server error:", data.message);
+          return;
+        }
 
         if (data.type === "step_updated" && data.active_step) {
           updateStepUI(data.active_step);
@@ -325,10 +354,10 @@
         }
 
         // Fast Frame Analysis
-        if (data.segments && data.segments.length > 0) {
+        if (Array.isArray(data.segments) && data.segments.length > 0) {
           currentSegments = data.segments.map((s, idx) => ({
             ...s,
-            color: idx === 0 ? "#00C6FF" : "#00D26A"
+            color: SEGMENT_COLORS[idx % SEGMENT_COLORS.length]
           }));
           updateLegend(currentSegments);
         } else if (activeFeedMode === "camera") {
@@ -353,14 +382,16 @@
 
       ws.onclose = () => {
         isAwaitingResponse = false;
-        console.log("WebSocket closed, retrying in 2 seconds...");
+        console.log(`WebSocket closed, retrying in ${reconnectDelay}ms...`);
         connectionStatus.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-500"></span> Connecting...';
         connectionStatus.className = "flex items-center gap-2 text-xs px-3 py-1.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20";
         if (streamInterval) {
           clearInterval(streamInterval);
           streamInterval = null;
         }
-        setTimeout(connectWebSocket, 2000);
+        const delay = reconnectDelay;
+        reconnectDelay = Math.min(reconnectDelay * 2, 10000);
+        setTimeout(connectWebSocket, delay);
       };
     } catch (e) {
       console.warn("WebSocket init error:", e);

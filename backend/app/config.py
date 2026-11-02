@@ -11,9 +11,10 @@ class Settings(BaseSettings):
     meta_api_base_url: str = "https://api.meta.ai/v1"
     modal_token_id: str = ""
     modal_token_secret: str = ""
-    debug: bool = True
+    debug: bool = False
     host: str = "0.0.0.0"
     port: int = 8000
+    cors_allowed_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     model_config = SettingsConfigDict(
         env_file=[str(ENV_PATH), ".env"],

@@ -1,4 +1,5 @@
 import math
+import cv2
 import numpy as np
 from typing import List, Dict, Any, Optional
 from app.schemas.models import SegmentedObject, Point, BoundingBox
@@ -87,6 +88,7 @@ class SAMService:
         Simplifies polygon contours using the Douglas-Peucker algorithm.
         Removes redundant vertices and camera jitter while preserving key geometric corners.
         """
+        epsilon = max(0.1, min(float(epsilon), 100.0))
         if len(points) <= 3:
             return points
         pts_arr = np.array([[p.x, p.y] for p in points], dtype=float)
@@ -105,6 +107,7 @@ class SAMService:
         Applies Chaikin's corner-cutting algorithm to produce smooth, jitter-free AR contours.
         Each iteration cuts corners at 1/4 and 3/4 along each line segment.
         """
+        iterations = max(0, min(int(iterations), 5))
         if len(points) < 3 or iterations <= 0:
             return points
         pts = np.array([[p.x, p.y] for p in points], dtype=float)
@@ -148,41 +151,27 @@ class SAMService:
     def trace_binary_mask(self, mask: np.ndarray, min_area: float = 20.0) -> List[Point]:
         """
         Extracts an ordered polygon contour from a 2D binary numpy mask (H x W)
-        using the Moore-Neighbor tracing algorithm.
+        using OpenCV contour tracing (robust replacement for the buggy
+        Moore-Neighbor implementation).
         """
         if mask.ndim != 2 or not np.any(mask):
             return []
-        h, w = mask.shape
-        # 8-connected search directions: N, NE, E, SE, S, SW, W, NW
-        dirs = [(-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1)]
-
-        indices = np.argwhere(mask)
-        if len(indices) < min_area:
+        if int(np.count_nonzero(mask)) < min_area:
             return []
-        start_y, start_x = int(indices[0][0]), int(indices[0][1])
-
-        contour = []
-        curr_y, curr_x = start_y, start_x
-        dir_idx = 0
-        max_steps = w * h * 2
-
-        for _ in range(max_steps):
-            contour.append(Point(x=float(curr_x), y=float(curr_y)))
-            found = False
-            search_start = (dir_idx + 5) % 8
-            for k in range(8):
-                test_dir = (search_start + k) % 8
-                dy, dx = dirs[test_dir]
-                ny, nx = curr_y + dy, curr_x + dx
-                if 0 <= ny < h and 0 <= nx < w and mask[ny, nx]:
-                    curr_y, curr_x = ny, nx
-                    dir_idx = test_dir
-                    found = True
-                    break
-            if not found or (curr_y == start_y and curr_x == start_x and len(contour) > 1):
-                break
-
-        return contour
+        mask_u8 = (mask.astype(np.uint8) * 255) if mask.dtype != np.uint8 else mask
+        contours, _ = cv2.findContours(mask_u8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return []
+        largest = max(contours, key=cv2.contourArea)
+        if cv2.contourArea(largest) < min_area:
+            return []
+        points: List[Point] = []
+        for pt in largest:
+            points.append(Point(x=float(pt[0][0]), y=float(pt[0][1])))
+        # Drop closing duplicate if present
+        if len(points) > 1 and points[0].x == points[-1].x and points[0].y == points[-1].y:
+            points.pop()
+        return points
 
     def calculate_polygon_area(self, points: List[Point]) -> float:
         """Calculates polygon surface area using the Shoelace formula."""
@@ -343,8 +332,7 @@ class SAMService:
                 simplified = self.simplify_polygon(polygon, epsilon=epsilon)
                 polygon = self.smooth_polygon(simplified, iterations=smoothing_iterations, closed=True)
 
-            # Calculate geometric attributes
-            area = self.calculate_polygon_area(polygon) if polygon else None
+            # Calculate geometric attributes (centroid/bbox before normalization)
             centroid = self.calculate_centroid(polygon, bbox=seg.bbox)
             bbox = self.compute_bounding_box(polygon) if polygon else seg.bbox
 
@@ -355,6 +343,9 @@ class SAMService:
                 bbox = self.normalize_bbox(bbox, width=frame_width, height=frame_height)
                 centroid = self.normalize_coordinates([centroid], width=frame_width, height=frame_height)[0]
                 is_normalized = True
+
+            # Area computed on final (possibly normalized) polygon for consistency
+            area = self.calculate_polygon_area(polygon) if polygon else None
 
             processed.append(
                 SegmentedObject(

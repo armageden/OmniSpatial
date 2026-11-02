@@ -28,7 +28,6 @@ image = (
 
 @app.function(
     image=image,
-    gpu="T4",
     timeout=60,
     scaledown_window=120
 )
@@ -64,7 +63,7 @@ def process_frame_gpu(image_bytes: bytes, target_label: str = "components") -> d
 
     return {
         "status": "success",
-        "device": "cuda",
+        "device": "cpu",
         "frame_width": w,
         "frame_height": h,
         "sharpness_score": round(blur_score, 2),
@@ -77,15 +76,27 @@ def process_frame_gpu(image_bytes: bytes, target_label: str = "components") -> d
 @modal.fastapi_endpoint(method="POST")
 def api_process_frame(payload: dict):
     """Web endpoint for processing frames via HTTP POST."""
+    if not isinstance(payload, dict):
+        return {"error": "payload must be object"}
+    # Optional shared-secret auth
+    import os
+    expected = os.environ.get("MODAL_API_KEY") or ""
+    if expected and payload.get("api_key") != expected:
+        return {"error": "unauthorized"}
     image_base64 = payload.get("image_base64", "")
     target_label = payload.get("target_label", "electronics")
     if not image_base64:
         return {"error": "Missing image_base64"}
+    if len(image_base64) > 2_000_000:
+        return {"error": "image payload too large"}
 
     if "," in image_base64:
         image_base64 = image_base64.split(",", 1)[1]
 
-    raw_bytes = base64.b64decode(image_base64)
+    try:
+        raw_bytes = base64.b64decode(image_base64, validate=True)
+    except Exception:
+        return {"error": "invalid base64"}
     return process_frame_gpu.local(raw_bytes, target_label=target_label)
 
 @app.function(image=image)
@@ -95,5 +106,5 @@ def health():
         "status": "online",
         "provider": "Modal",
         "service": "OmniSpatial GPU Pipeline",
-        "gpu_enabled": True
+        "gpu_enabled": False
     }
