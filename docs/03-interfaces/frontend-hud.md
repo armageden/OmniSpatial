@@ -14,6 +14,7 @@
 - Managed via `setupCamera()` and `stopCamera()` in `frontend/app.js`.
 - Accesses user camera using `navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } })`.
 - Handles camera permission denials gracefully by falling back to the built-in procedural demo simulation mode (`demo_clips.js`).
+- **Aspect-Ratio Preserving Downsampling:** Capture frames match the camera aspect ratio (`targetW = 640`, `targetH = Math.round(640 * (canvas.height / canvas.width)) || 360`) and scale segment overlay coordinates accurately onto display resolutions.
 - **Client-Side Backpressure:** Guarded by `isAwaitingResponse` flag. New frames are dropped if the server is processing a prior frame, permanently preventing buffer queue buildup and keeping latency strictly sub-250ms.
 
 ### 2. Canvas Mask Overlay Engine

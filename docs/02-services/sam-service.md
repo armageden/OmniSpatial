@@ -35,10 +35,10 @@ Responsible for processing raw video frames through SAM 3.1, transforming low-le
 - `denormalize_bbox(bbox: BoundingBox, width: float, height: float) -> BoundingBox`: Denormalizes bounding box boundaries.
 
 #### 4. Geometry & Contour Algorithms
-- `simplify_polygon(points: List[Point], epsilon: float = 1.5) -> List[Point]`: Recursive Douglas-Peucker simplification using vector perpendicular distances.
-- `smooth_polygon(points: List[Point], iterations: int = 1, closed: bool = True) -> List[Point]`: Chaikin's corner subdivision smoothing algorithm.
+- `simplify_polygon(points: List[Point], epsilon: float = 1.5) -> List[Point]`: Recursive Douglas-Peucker simplification using vector perpendicular distances, with input clamping for bounds safety.
+- `smooth_polygon(points: List[Point], iterations: int = 1, closed: bool = True) -> List[Point]`: Chaikin's corner subdivision smoothing algorithm, with iterations bounded to `[0, 5]`.
 - `parse_polygon(raw_polygon: Any) -> List[Point]`: Robust parser accepting `Point` models, dictionaries, coordinate tuples, or NumPy arrays.
-- `trace_binary_mask(mask: np.ndarray, min_area: float = 20.0) -> List[Point]`: Moore-Neighbor boundary tracing algorithm for 2D binary segmentation masks.
+- `trace_binary_mask(mask: np.ndarray, min_area: float = 20.0) -> List[Point]`: Boundary tracing algorithm for 2D binary segmentation masks powered by OpenCV contour detection.
 - `calculate_polygon_area(points: List[Point]) -> float`: Shoelace formula surface area calculation.
 - `calculate_centroid(points: List[Point], bbox: Optional[BoundingBox] = None) -> Point`: Centroid calculation with fallback to bounding box center.
 - `compute_bounding_box(points: List[Point]) -> BoundingBox`: Computes tight axis-aligned bounding box from vertex extremes.

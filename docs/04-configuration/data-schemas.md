@@ -51,8 +51,8 @@ Outcome produced by `ReasoningEngine` and Muse Spark:
 
 ### 6. `FrameAnalysisPayload`
 Inbound stream data container sent from client over WebSocket:
-- `frame_id` (`int`): Frame sequence number.
-- `timestamp` (`float`): Client capture epoch timestamp.
+- `frame_id` (`int`): Frame sequence number (default `0`).
+- `timestamp` (`float`): Client capture epoch timestamp (default factory `time.time`).
 - `image_base64` (`str`): Base64 encoded JPEG or PNG image.
 - `active_step` (`int`): Current step being worked on (default `1`).
 - `width` (`Optional[int]`): Video capture width in pixels.
@@ -62,6 +62,7 @@ Inbound stream data container sent from client over WebSocket:
 - `action` (`Optional[str]`): Control action string (e.g. `"verify_step"`, `"next_step"`).
 - `trigger_verify` (`bool`): Boolean flag triggering asynchronous Muse Spark evaluation.
 - `custom_prompt` (`Optional[str]`): Open-vocabulary concept segmentation prompt overriding milestone defaults.
+- `allow_fallback` (`bool`): Boolean allowing graceful mock fallback on network degradation (default `False`).
 
 ### 7. `StreamActionRequest`
 Explicit control payload sent via WebSocket:

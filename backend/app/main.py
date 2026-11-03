@@ -8,7 +8,7 @@ from app.config import settings
 from app.services.sam_service import sam_service
 from app.services.reasoning_engine import reasoning_engine, ReasoningEngine
 from app.services.meta_client import meta_client
-from app.schemas.models import TargetImageResponse, StreamActionRequest
+from app.schemas.models import TargetImageResponse, StreamActionRequest, FrameAnalysisPayload
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("omnispatial")
@@ -59,18 +59,33 @@ async def set_step(step_number: int):
     active = reasoning_engine.set_step(step_number)
     return {"status": "ok", "active_step": active.model_dump()}
 
+@app.post("/api/action")
+async def execute_action(request: StreamActionRequest):
+    if request.action == "next_step":
+        active = reasoning_engine.advance_step()
+    elif request.action == "prev_step":
+        active = reasoning_engine.previous_step()
+    elif request.action == "reset_workflow":
+        active = reasoning_engine.reset_workflow()
+    elif request.action == "set_step":
+        active = reasoning_engine.set_step(request.step_number or 1)
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported action: {request.action}")
+    return {"status": "ok", "active_step": active.model_dump()}
+
 @app.get("/api/steps/{step_number}/target-image", response_model=TargetImageResponse)
 async def get_target_image(step_number: int):
     if step_number < 1 or step_number > len(reasoning_engine.steps):
         raise HTTPException(status_code=404, detail="Step not found")
     step = reasoning_engine.steps[step_number - 1]
     prompt = f"Perspective engineering diagram of circuit board: {step.title}. {step.description}"
+    was_cached = meta_client.is_target_image_cached(step_number)
     image_url = await meta_client.generate_target_image_muse(prompt, step_number=step_number)
     return TargetImageResponse(
         step_number=step_number,
         image_data_url=image_url,
         source="muse_image_1.0",
-        is_cached=True
+        is_cached=was_cached
     )
 
 @app.websocket("/ws/stream")
@@ -88,6 +103,7 @@ async def websocket_stream_endpoint(websocket: WebSocket):
 
     # Track any pending verification background task to avoid overlapping calls
     verification_task: Optional[asyncio.Task] = None
+    last_verify_time: float = 0.0
 
     async def run_async_verification(segments, spatial_relations, auto_advance: bool):
         try:
@@ -104,6 +120,8 @@ async def websocket_stream_endpoint(websocket: WebSocket):
             }
             await websocket.send_json(update_payload)
             logger.info(f"Verification completed. Result verified: {verification.is_verified}")
+        except (WebSocketDisconnect, RuntimeError):
+            logger.info("Client disconnected before verification result could be delivered.")
         except Exception as err:
             logger.error(f"Error during async verification: {err}")
 
@@ -124,36 +142,46 @@ async def websocket_stream_endpoint(websocket: WebSocket):
 
             action = payload.get("action")
             # Handle control actions
-            if action == "next_step":
-                active = reasoning_engine.advance_step()
-                await websocket.send_json({"type": "step_updated", "active_step": active.model_dump()})
-                continue
-            elif action == "prev_step":
-                active = reasoning_engine.previous_step()
-                await websocket.send_json({"type": "step_updated", "active_step": active.model_dump()})
-                continue
-            elif action == "reset_workflow":
-                active = reasoning_engine.reset_workflow()
-                await websocket.send_json({"type": "step_updated", "active_step": active.model_dump()})
-                continue
-            elif action == "set_step":
+            if action in ("next_step", "prev_step", "reset_workflow", "set_step"):
                 try:
-                    num = int(payload.get("step_number", 1))
-                except (ValueError, TypeError):
-                    await websocket.send_json({"type": "error", "message": "invalid step_number"})
+                    action_req = StreamActionRequest.model_validate(payload)
+                except Exception as val_err:
+                    await websocket.send_json({"type": "error", "message": f"invalid action payload: {val_err}"})
                     continue
-                active = reasoning_engine.set_step(num)
-                await websocket.send_json({"type": "step_updated", "active_step": active.model_dump()})
+
+                if action_req.action == "next_step":
+                    active = reasoning_engine.advance_step()
+                    await websocket.send_json({"type": "step_updated", "active_step": active.model_dump()})
+                    continue
+                elif action_req.action == "prev_step":
+                    active = reasoning_engine.previous_step()
+                    await websocket.send_json({"type": "step_updated", "active_step": active.model_dump()})
+                    continue
+                elif action_req.action == "reset_workflow":
+                    active = reasoning_engine.reset_workflow()
+                    await websocket.send_json({"type": "step_updated", "active_step": active.model_dump()})
+                    continue
+                elif action_req.action == "set_step":
+                    num = int(action_req.step_number or 1)
+                    active = reasoning_engine.set_step(num)
+                    await websocket.send_json({"type": "step_updated", "active_step": active.model_dump()})
+                    continue
+
+            # Validate frame analysis request
+            try:
+                frame_req = FrameAnalysisPayload.model_validate(payload)
+            except Exception as val_err:
+                await websocket.send_json({"type": "error", "message": f"invalid frame payload: {val_err}"})
                 continue
 
-            image_base64 = payload.get("image_base64", "")
-            frame_id = payload.get("frame_id", 0)
-            width = payload.get("width")
-            height = payload.get("height")
-            normalize = bool(payload.get("normalize", False))
-            smooth = bool(payload.get("smooth", True))
-            trigger_verify = bool(payload.get("trigger_verify", False)) or (action == "verify_step")
-            allow_fallback = bool(payload.get("allow_fallback", False)) or meta_client.is_mock
+            image_base64 = frame_req.image_base64
+            frame_id = frame_req.frame_id
+            width = frame_req.width
+            height = frame_req.height
+            normalize = frame_req.normalize
+            smooth = frame_req.smooth
+            trigger_verify = frame_req.trigger_verify or (frame_req.action == "verify_step")
+            allow_fallback = frame_req.allow_fallback or meta_client.is_mock
 
             if not image_base64:
                 continue
@@ -162,7 +190,7 @@ async def websocket_stream_endpoint(websocket: WebSocket):
                 continue
 
             active_step = reasoning_engine.get_active_step()
-            custom_prompt = payload.get("custom_prompt")
+            custom_prompt = frame_req.custom_prompt
             if custom_prompt and str(custom_prompt).strip():
                 target_label = str(custom_prompt).strip()
                 target_components = [t.strip() for t in target_label.split(",") if t.strip()]
@@ -185,21 +213,26 @@ async def websocket_stream_endpoint(websocket: WebSocket):
             # 2. Compute spatial topology & vectors
             spatial_relations = sam_service.compute_spatial_relationships(segments)
 
-            # 3. Check for verification trigger (Asynchronous non-blocking dispatch)
+            # 3. Check for verification trigger (Debounced asynchronous non-blocking dispatch)
             if trigger_verify:
-                if verification_task is None or verification_task.done():
-                    verification_task = asyncio.create_task(
-                        run_async_verification(
-                            segments=segments,
-                            spatial_relations=spatial_relations,
-                            auto_advance=bool(payload.get("auto_advance", False))
+                now_t = asyncio.get_event_loop().time()
+                if now_t - last_verify_time >= 0.8:
+                    last_verify_time = now_t
+                    if verification_task is None or verification_task.done():
+                        verification_task = asyncio.create_task(
+                            run_async_verification(
+                                segments=segments,
+                                spatial_relations=spatial_relations,
+                                auto_advance=bool(payload.get("auto_advance", False))
+                            )
                         )
-                    )
 
             # 4. Stream fast frame analysis back immediately
             response_payload = {
                 "type": "frame_analysis",
                 "frame_id": frame_id,
+                "frame_width": width,
+                "frame_height": height,
                 "segments": [s.model_dump() for s in segments],
                 "spatial_relations": spatial_relations,
                 "active_step": active_step.model_dump(),

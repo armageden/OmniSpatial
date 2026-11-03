@@ -42,13 +42,15 @@ Delivers sub-250ms SAM 3.1 polygon masks and spatial topology vectors:
 {
   "type": "frame_analysis",
   "frame_id": 42,
+  "frame_width": 640,
+  "frame_height": 360,
   "segments": [
     {
       "id": "comp_1",
       "label": "microcontroller_chip",
       "confidence": 0.96,
       "bbox": {"x_min": 180.0, "y_min": 140.0, "x_max": 300.0, "y_max": 260.0},
-      "polygon": [{"x": 195.0, "y": 140.0}, {"x": 285.0, "y": 140.0}, ...],
+      "polygon": [{"x": 195.0, "y": 140.0}, {"x": 285.0, "y": 140.0}],
       "centroid": {"x": 240.0, "y": 200.0}
     }
   ],

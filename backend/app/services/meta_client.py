@@ -86,7 +86,10 @@ class MetaModelAPIClient:
         self.is_mock = not self.api_key or self.api_key in ("mock_key", "your_meta_model_api_key_here", "")
         # Regex matching SAM 3.1 bounding box followed optionally by compressed RLE mask
         self.sam_obj_regex = re.compile(
-            r"<\|box;x1=(?P<x1>[0-9.]+);y1=(?P<y1>[0-9.]+);x2=(?P<x2>[0-9.]+);y2=(?P<y2>[0-9.]+)(?:;w=(?P<w>[0-9.]+);h=(?P<h>[0-9.]+))?\|>(?:<\|mask;x=(?P<mx>[0-9.]+);y=(?P<my>[0-9.]+);data=(?P<data>[^|>]+)\|>)?",
+            r"<\|box;x1=(?P<x1>[0-9.]+);y1=(?P<y1>[0-9.]+);x2=(?P<x2>[0-9.]+);y2=(?P<y2>[0-9.]+)"
+            r"(?:;w=(?P<w>[0-9.]+);h=(?P<h>[0-9.]+))?"
+            r"(?:;(?:score|conf|confidence)=(?P<score>[0-9.]+))?\|>"
+            r"(?:<\|mask;x=(?P<mx>[0-9.]+);y=(?P<my>[0-9.]+);data=(?P<data>[^|>]+)\|>)?",
             re.DOTALL
         )
         self.box_regex = re.compile(
@@ -96,6 +99,10 @@ class MetaModelAPIClient:
             r"<\|mask;x=(?P<x>[0-9.]+);y=(?P<y>[0-9.]+);data=(?P<data>[^|>]+)\|>"
         )
         self._target_image_cache: Dict[str, str] = {}
+
+    def is_target_image_cached(self, step_number: int) -> bool:
+        """Checks if target blueprint for given step number is already cached."""
+        return f"step_{step_number}" in self._target_image_cache
 
     def _fallback_octagon_polygon(self, bbox: BoundingBox) -> List[Point]:
         """Generates an 8-point geometric smoothed octagonal polygon as a fallback."""
@@ -230,11 +237,18 @@ class MetaModelAPIClient:
                             if target_components and idx < len(target_components):
                                 label = target_components[idx]
 
+                            score_val = match.group("score")
+                            try:
+                                confidence = float(score_val) if score_val is not None else 0.96
+                            except (ValueError, TypeError):
+                                confidence = 0.96
+                            confidence = max(0.0, min(confidence, 1.0))
+
                             segments.append(
                                 SegmentedObject(
                                     id=f"sam_{idx + 1}",
                                     label=label,
-                                    confidence=0.96,
+                                    confidence=confidence,
                                     bbox=bbox,
                                     polygon=polygon,
                                     attributes={
@@ -310,7 +324,9 @@ class MetaModelAPIClient:
             return self._target_image_cache[cache_key]
 
         if self.is_mock:
-            return DEFAULT_TARGET_SVGS.get(step_number, DEFAULT_TARGET_SVGS[1])
+            svg_data = DEFAULT_TARGET_SVGS.get(step_number, DEFAULT_TARGET_SVGS[1])
+            self._target_image_cache[cache_key] = svg_data
+            return svg_data
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -334,10 +350,14 @@ class MetaModelAPIClient:
                         self._target_image_cache[cache_key] = image_data
                         return image_data
 
-                return DEFAULT_TARGET_SVGS.get(step_number, DEFAULT_TARGET_SVGS[1])
+                fallback_svg = DEFAULT_TARGET_SVGS.get(step_number, DEFAULT_TARGET_SVGS[1])
+                self._target_image_cache[cache_key] = fallback_svg
+                return fallback_svg
         except Exception as e:
             logger.warning(f"Muse Image call encountered: {e}. Using cached blueprint.")
-            return DEFAULT_TARGET_SVGS.get(step_number, DEFAULT_TARGET_SVGS[1])
+            fallback_svg = DEFAULT_TARGET_SVGS.get(step_number, DEFAULT_TARGET_SVGS[1])
+            self._target_image_cache[cache_key] = fallback_svg
+            return fallback_svg
 
     def _mock_segments(self, target_components: Optional[List[str]] = None) -> List[SegmentedObject]:
         primary_label = target_components[0] if target_components else "microcontroller_chip"

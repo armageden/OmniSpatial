@@ -7,7 +7,7 @@
 
 ## Application Configuration
 - **Instance:** `app = FastAPI(title=settings.app_name, debug=settings.debug)`
-- **Middleware:** `CORSMiddleware` configured with wildcard allowances (`allow_origins=["*"]`) for local frontend development.
+- **Middleware:** `CORSMiddleware` configured with origins parsed from `settings.cors_allowed_origins` (defaulting to `http://localhost:3000,http://127.0.0.1:3000`), automatically managing credential permissions.
 
 ## Endpoints
 
@@ -19,7 +19,7 @@
   {
     "status": "online",
     "app": "OmniSpatial API",
-    "mock_mode": true
+    "mock_mode": false
   }
   ```
 - **Use Case:** Sanity checks, container liveness probes, and verifying whether `meta_client` is running in mock mode.
@@ -30,10 +30,11 @@
 - **Use Case:** Initial client bootstrapping and procedural roadmap visualization.
 
 #### Step Navigation Routes:
-- `POST /api/steps/next`: Advances active task step and sets prior step to `verified`.
+- `POST /api/steps/next`: Advances active task step and marks prior step as `verified` if not failed.
 - `POST /api/steps/prev`: Navigates to previous assembly step.
 - `POST /api/steps/reset`: Resets full procedure to Step 1.
 - `POST /api/steps/set/{step_number}`: Jumps directly to specified step.
+- `POST /api/action`: Universal REST action controller accepting `StreamActionRequest` (`next_step`, `prev_step`, `reset_workflow`, `set_step`).
 
 ### 3. Synthesized Visual Target Blueprint
 - **Route:** `GET /api/steps/{step_number}/target-image`
@@ -42,12 +43,12 @@
   ```json
   {
     "step_number": 1,
-    "image_data_url": "data:image/svg+xml;utf8,...",
+    "image_data_url": "data:image/webp;base64,...",
     "source": "muse_image_1.0",
-    "is_cached": true
+    "is_cached": false
   }
   ```
-- **Use Case:** Provides perspective engineering blueprint for sidebar preview and AR holographic canvas projection.
+- **Use Case:** Provides perspective engineering blueprint for sidebar preview and AR holographic canvas projection. Reports dynamic `is_cached` status reflecting cache hits.
 
 ## Cross-References
 - Streaming endpoint: [websocket-protocol.md](./websocket-protocol.md).

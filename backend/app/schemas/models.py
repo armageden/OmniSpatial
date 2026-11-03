@@ -1,4 +1,5 @@
-from pydantic import BaseModel, Field
+import time
+from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Dict, Any, Optional
 
 class Point(BaseModel):
@@ -39,8 +40,8 @@ class VerificationResult(BaseModel):
     suggested_action: Optional[str] = None
 
 class FrameAnalysisPayload(BaseModel):
-    frame_id: int
-    timestamp: float
+    frame_id: int = 0
+    timestamp: float = Field(default_factory=time.time)
     image_base64: str
     active_step: int = 1
     width: Optional[int] = None
@@ -50,10 +51,15 @@ class FrameAnalysisPayload(BaseModel):
     action: Optional[str] = None
     trigger_verify: bool = False
     custom_prompt: Optional[str] = None
+    allow_fallback: bool = False
+
+    model_config = ConfigDict(extra="ignore")
 
 class StreamActionRequest(BaseModel):
     action: str # verify_step | next_step | prev_step | reset_workflow | set_step
     step_number: Optional[int] = None
+
+    model_config = ConfigDict(extra="ignore")
 
 class TargetImageResponse(BaseModel):
     step_number: int

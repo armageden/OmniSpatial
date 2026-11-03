@@ -130,6 +130,11 @@ class TestOmniSpatialPipeline(unittest.TestCase):
         self.assertIn("data:image/", img_data["image_data_url"])
         self.assertEqual(img_data["step_number"], 1)
 
+        # Second call must report is_cached = True
+        img_res_cached = self.client.get("/api/steps/1/target-image")
+        self.assertEqual(img_res_cached.status_code, 200)
+        self.assertTrue(img_res_cached.json()["is_cached"])
+
         # Test Step Actions
         next_res = self.client.post("/api/steps/next")
         self.assertEqual(next_res.status_code, 200)
@@ -138,6 +143,11 @@ class TestOmniSpatialPipeline(unittest.TestCase):
         reset_res = self.client.post("/api/steps/reset")
         self.assertEqual(reset_res.status_code, 200)
         self.assertEqual(reset_res.json()["active_step"]["step_number"], 1)
+
+        # Test /api/action endpoint
+        action_res = self.client.post("/api/action", json={"action": "set_step", "step_number": 3})
+        self.assertEqual(action_res.status_code, 200)
+        self.assertEqual(action_res.json()["active_step"]["step_number"], 3)
 
     # --- 6. Custom Prompt Payload Tests ---
 

@@ -250,14 +250,21 @@ class SAMService:
                     continue
 
                 # Use centroid if available; fallback to bbox center
-                center_a = (
-                    seg_a.centroid.x if seg_a.centroid else (seg_a.bbox.x_min + seg_a.bbox.x_max) / 2.0,
-                    seg_a.centroid.y if seg_a.centroid else (seg_a.bbox.y_min + seg_a.bbox.y_max) / 2.0
-                )
-                center_b = (
-                    seg_b.centroid.x if seg_b.centroid else (seg_b.bbox.x_min + seg_b.bbox.x_max) / 2.0,
-                    seg_b.centroid.y if seg_b.centroid else (seg_b.bbox.y_min + seg_b.bbox.y_max) / 2.0
-                )
+                if seg_a.centroid is not None:
+                    center_a = (seg_a.centroid.x, seg_a.centroid.y)
+                else:
+                    center_a = (
+                        (seg_a.bbox.x_min + seg_a.bbox.x_max) / 2.0,
+                        (seg_a.bbox.y_min + seg_a.bbox.y_max) / 2.0
+                    )
+
+                if seg_b.centroid is not None:
+                    center_b = (seg_b.centroid.x, seg_b.centroid.y)
+                else:
+                    center_b = (
+                        (seg_b.bbox.x_min + seg_b.bbox.x_max) / 2.0,
+                        (seg_b.bbox.y_min + seg_b.bbox.y_max) / 2.0
+                    )
 
                 dx = center_b[0] - center_a[0]
                 dy = center_b[1] - center_a[1]

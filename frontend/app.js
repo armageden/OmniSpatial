@@ -206,7 +206,7 @@
     isAwaitingResponse = true;
 
     const targetW = 640;
-    const targetH = 360;
+    const targetH = Math.round(640 * (canvas.height / canvas.width)) || 360;
     captureCanvas.width = targetW;
     captureCanvas.height = targetH;
 
@@ -222,8 +222,8 @@
       frame_id: clientFrameId,
       timestamp: Date.now() / 1000,
       image_base64: base64Data,
-      width: canvas.width,
-      height: canvas.height,
+      width: targetW,
+      height: targetH,
       normalize: false,
       smooth: true,
       active_step: currentStepNumber,
@@ -355,10 +355,41 @@
 
         // Fast Frame Analysis
         if (Array.isArray(data.segments) && data.segments.length > 0) {
-          currentSegments = data.segments.map((s, idx) => ({
-            ...s,
-            color: SEGMENT_COLORS[idx % SEGMENT_COLORS.length]
-          }));
+          const frameW = data.frame_width || 640;
+          const frameH = data.frame_height || 360;
+          const scaleX = (frameW > 0) ? canvas.width / frameW : 1.0;
+          const scaleY = (frameH > 0) ? canvas.height / frameH : 1.0;
+
+          currentSegments = data.segments.map((s, idx) => {
+            const isNorm = Boolean(s.is_normalized);
+            const sx = isNorm ? canvas.width : scaleX;
+            const sy = isNorm ? canvas.height : scaleY;
+
+            const scaledPolygon = Array.isArray(s.polygon)
+              ? s.polygon.map(pt => ({ x: Math.round(pt.x * sx * 10) / 10, y: Math.round(pt.y * sy * 10) / 10 }))
+              : [];
+
+            const scaledCentroid = s.centroid
+              ? { x: Math.round(s.centroid.x * sx * 10) / 10, y: Math.round(s.centroid.y * sy * 10) / 10 }
+              : null;
+
+            const scaledBbox = s.bbox
+              ? {
+                  x_min: Math.round(s.bbox.x_min * sx * 10) / 10,
+                  y_min: Math.round(s.bbox.y_min * sy * 10) / 10,
+                  x_max: Math.round(s.bbox.x_max * sx * 10) / 10,
+                  y_max: Math.round(s.bbox.y_max * sy * 10) / 10
+                }
+              : s.bbox;
+
+            return {
+              ...s,
+              polygon: scaledPolygon,
+              centroid: scaledCentroid,
+              bbox: scaledBbox,
+              color: SEGMENT_COLORS[idx % SEGMENT_COLORS.length]
+            };
+          });
           updateLegend(currentSegments);
         } else if (activeFeedMode === "camera") {
           currentSegments = [];
@@ -444,8 +475,9 @@
       const segA = currentSegments.find(s => s.id === idA);
       const segB = currentSegments.find(s => s.id === idB);
       if (segA && segB && segA.centroid && segB.centroid) {
+        const currentDistPx = Math.round(Math.hypot(segB.centroid.x - segA.centroid.x, segB.centroid.y - segA.centroid.y));
         const isAnomaly = lastVerificationData && (!lastVerificationData.is_verified || (lastVerificationData.detected_anomalies && lastVerificationData.detected_anomalies.length > 0));
-        const isAligned = rel.distance_px < 25;
+        const isAligned = currentDistPx < 25;
         const pulse = Math.sin(now * 0.006) * 0.2 + 0.8;
 
         // Animated Trajectory Vector from Component to Target
@@ -489,7 +521,7 @@
         // Distance & Alignment Pill Badge
         const midX = (segA.centroid.x + segB.centroid.x) / 2.0;
         const midY = (segA.centroid.y + segB.centroid.y) / 2.0;
-        const badgeText = isAligned ? "🎯 TARGET ALIGNED (±1mm)" : isAnomaly ? `⚠ REALIGN (${rel.distance_px}px)` : `MOVE ↗ ${rel.distance_px}px`;
+        const badgeText = isAligned ? "🎯 TARGET ALIGNED (±1mm)" : isAnomaly ? `⚠ REALIGN (${currentDistPx}px)` : `MOVE ↗ ${currentDistPx}px`;
         ctx.font = "bold 10px 'JetBrains Mono', monospace";
         const badgeW = ctx.measureText(badgeText).width + 18;
         const badgeH = 22;
