@@ -5,6 +5,12 @@
 
 ---
 
+### 🎥 Demonstration Video
+[![OmniSpatial Demo Video](https://img.youtube.com/vi/RIQpXqRXlCE/maxresdefault.jpg)](https://youtu.be/RIQpXqRXlCE)  
+▶️ **[Watch the Live Application Walkthrough on YouTube](https://youtu.be/RIQpXqRXlCE)** *(1080p Full HD • Narrated Feature Walkthrough • Real Hardware Anomaly Detection)*
+
+---
+
 ## 🌟 Overview
 
 **OmniSpatial** bridges Meta's newest foundation models with human physical dexterity. By observing a live overhead video feed (webcam, smartphone, or wearable camera), OmniSpatial transforms dynamic physical tasks—such as electronics assembly, PCB inspection, laboratory procedures, or mechanical repair—into an interactive augmented reality experience:

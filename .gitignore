@@ -22,6 +22,7 @@ venv/
 ENV/
 env/
 backend/.venv/
+node_modules/
 
 # Tooling / agent state
 .commandcode/

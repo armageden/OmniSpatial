@@ -104,6 +104,12 @@ async def websocket_stream_endpoint(websocket: WebSocket):
     - Fast Loop: Streams video frames, computes SAM 3.1 masks and spatial vectors (~150-250ms)
     - Slow Reasoning Loop: Asynchronously executes Muse Spark verification on trigger without blocking video
     """
+    origin = websocket.headers.get("origin")
+    if origin and "*" not in _cors_origins and origin not in _cors_origins:
+        logger.warning(f"Rejecting WebSocket connection from unauthorized origin: {origin}")
+        await websocket.close(code=1008)
+        return
+
     await websocket.accept()
     logger.info("Client connected to OmniSpatial dual-loop stream.")
 
@@ -113,6 +119,7 @@ async def websocket_stream_endpoint(websocket: WebSocket):
     # Track any pending verification background task to avoid overlapping calls
     verification_task: Optional[asyncio.Task] = None
     last_verify_time: float = 0.0
+    client_time_offset: Optional[float] = None
 
     async def run_async_verification(segments, spatial_relations, auto_advance: bool, image_base64: str = ""):
         try:
@@ -178,6 +185,8 @@ async def websocket_stream_endpoint(websocket: WebSocket):
                     continue
                 elif action_req.action == "set_workflow":
                     active = await reasoning_engine.load_custom_workflow(action_req.task_goal or "")
+                    from app.services.reasoning_engine import reasoning_engine as global_engine
+                    global_engine.steps = [s.model_copy() for s in reasoning_engine.steps]
                     await websocket.send_json({
                         "type": "step_updated",
                         "active_step": active.model_dump(),
@@ -206,6 +215,19 @@ async def websocket_stream_endpoint(websocket: WebSocket):
             if len(image_base64) > 2_500_000:
                 await websocket.send_json({"type": "error", "message": "image payload too large"})
                 continue
+
+            # Drop stale buffered frames to eliminate queue delay and preserve real-time HUD
+            if frame_req.timestamp > 0 and not trigger_verify:
+                import time
+                curr_wall = time.time()
+                if client_time_offset is None:
+                    if abs(curr_wall - frame_req.timestamp) < 10.0:
+                        client_time_offset = 0.0
+                    else:
+                        client_time_offset = curr_wall - frame_req.timestamp
+                frame_delay = (curr_wall - frame_req.timestamp) - client_time_offset
+                if frame_delay > 0.6:
+                    continue
 
             active_step = reasoning_engine.get_active_step()
             custom_prompt = frame_req.custom_prompt

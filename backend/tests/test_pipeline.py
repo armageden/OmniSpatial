@@ -604,5 +604,108 @@ class TestOmniSpatialPipeline(unittest.TestCase):
         asyncio.run(meta_client.close())
         self.assertIsNone(meta_client._http_client)
 
+    def test_websocket_origin_security_check(self):
+        from starlette.websockets import WebSocketDisconnect
+        # Unauthorized origin should be rejected
+        with self.assertRaises(WebSocketDisconnect):
+            with self.client.websocket_connect("/ws/stream", headers={"Origin": "http://unauthorized-domain.com"}) as ws:
+                ws.send_text(json.dumps({"action": "next_step"}))
+                ws.receive_json()
+
+        # Authorized origin should be accepted
+        with self.client.websocket_connect("/ws/stream", headers={"Origin": "http://localhost:3000"}) as ws:
+            ws.send_text(json.dumps({"action": "next_step"}))
+            msg = ws.receive_json()
+            self.assertEqual(msg["type"], "step_updated")
+
+    def test_sam_service_modal_integration(self):
+        test_img = np.zeros((64, 64, 3), dtype=np.uint8)
+        cv2.rectangle(test_img, (10, 10), (50, 50), (255, 255, 255), -1)
+        _, encoded = cv2.imencode(".jpg", test_img)
+        img_bytes = encoded.tobytes()
+
+        res = sam_service.process_frame_with_modal(img_bytes, target_label="pcb")
+        self.assertEqual(res["status"], "success")
+        self.assertIn("sharpness_score", res)
+        self.assertIn("edge_feature_count", res)
+
+    def test_stale_buffered_frame_dropped(self):
+        import time
+        with self.client.websocket_connect("/ws/stream") as ws:
+            # Send stale frame (timestamp from 5 seconds ago)
+            stale_payload = {
+                "frame_id": 999,
+                "timestamp": time.time() - 5.0,
+                "image_base64": "data:image/jpeg;base64,AAAA",
+                "feed_mode": "demo_esp32"
+            }
+            ws.send_text(json.dumps(stale_payload))
+
+            # Send fresh frame immediately after
+            fresh_payload = {
+                "frame_id": 1000,
+                "timestamp": time.time(),
+                "image_base64": "data:image/jpeg;base64,AAAA",
+                "feed_mode": "demo_esp32"
+            }
+            ws.send_text(json.dumps(fresh_payload))
+
+            # The received response must be for the fresh frame (frame_id 1000), not the stale one
+            msg = ws.receive_json()
+            self.assertEqual(msg["type"], "frame_analysis")
+            self.assertEqual(msg["frame_id"], 1000)
+
+    def test_set_workflow_syncs_steps_for_target_image(self):
+        with self.client.websocket_connect("/ws/stream") as ws:
+            ws.send_text(json.dumps({"action": "set_workflow", "task_goal": "Assemble robotic sensor module"}))
+            msg = ws.receive_json()
+            self.assertEqual(msg["type"], "step_updated")
+            self.assertEqual(len(msg["steps"]), 3)
+
+        # Global reasoning engine should now have the synced custom steps
+        img_res = self.client.get("/api/steps/1/target-image")
+        self.assertEqual(img_res.status_code, 200)
+        self.assertIn("data:image/", img_res.json()["image_data_url"])
+
+    def test_provider_selection_ignores_placeholder_keys(self):
+        from app.services.meta_client import MetaModelAPIClient
+        with patch("app.services.meta_client.settings") as mock_settings:
+            # Placeholders from .env.example must not trigger partner providers
+            mock_settings.baseten_api_key = "your_baseten_api_key_here"
+            mock_settings.fireworks_api_key = "your_fireworks_api_key_here"
+            mock_settings.meta_model_api_key = "LLM_12345_real_token"
+            mock_settings.meta_api_base_url = "https://api.meta.ai/v1"
+
+            client = MetaModelAPIClient()
+            self.assertEqual(client.provider, "meta")
+            self.assertFalse(client.is_mock)
+            self.assertEqual(client.base_url, "https://api.meta.ai/v1")
+
+    def test_failed_muse_spark_never_fabricates_verified(self):
+        import asyncio
+        original = meta_client.is_mock
+        meta_client.is_mock = False
+        try:
+            with patch.object(meta_client, "get_http_client") as mock_http:
+                mock_client = MagicMock()
+                mock_client.post = AsyncMock(side_effect=Exception("Connection refused"))
+                mock_http.return_value = mock_client
+
+                res = asyncio.run(meta_client.reason_physical_state_muse_spark(
+                    prompt="Verify step",
+                    context={"step": {"step_number": 1}}
+                ))
+                self.assertFalse(res["step_verified"])
+                self.assertEqual(res["confidence"], 0.0)
+                self.assertIn("unavailable", res["reasoning"].lower())
+        finally:
+            meta_client.is_mock = original
+
+    def test_mock_segments_labeled_offline_demo(self):
+        segs = meta_client._mock_segments(["microcontroller_chip", "socket_u1"])
+        for s in segs:
+            self.assertFalse(s.attributes.get("has_rle_mask", False))
+            self.assertEqual(s.attributes.get("source"), "offline_demo")
+
 if __name__ == "__main__":
     unittest.main()

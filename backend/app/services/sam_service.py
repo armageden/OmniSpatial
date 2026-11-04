@@ -270,6 +270,12 @@ class SAMService:
 
     # --- 5. Main Frame Pipeline ---
 
+    def process_frame_with_modal(self, image_bytes: bytes, target_label: str = "components") -> Dict[str, Any]:
+        """Runs high-resolution GPU frame preprocessing and edge analysis via Modal serverless worker."""
+        from app.services.modal_app import process_frame_gpu
+        dispatcher = getattr(process_frame_gpu, "local", process_frame_gpu)
+        return dispatcher(image_bytes, target_label=target_label)
+
     async def process_frame(
         self,
         image_base64: str,
@@ -350,6 +356,20 @@ class SAMService:
                     is_normalized=is_normalized
                 )
             )
+
+        # Enrich telemetry via Modal worker if configured
+        from app.config import settings
+        if settings.modal_token_id and image_base64 and processed:
+            try:
+                import base64
+                raw_b64 = image_base64.split(",", 1)[1] if "," in image_base64 else image_base64
+                img_bytes = base64.b64decode(raw_b64)
+                modal_meta = self.process_frame_with_modal(img_bytes, target_label=target_label)
+                for seg in processed:
+                    seg.attributes["modal_edge_count"] = modal_meta.get("edge_feature_count")
+                    seg.attributes["modal_sharpness"] = modal_meta.get("sharpness_score")
+            except Exception:
+                pass
 
         return processed
 

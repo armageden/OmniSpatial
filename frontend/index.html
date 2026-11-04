@@ -46,12 +46,21 @@
       <div class="flex items-center bg-slate-900/80 rounded-lg px-2.5 py-1 text-xs border border-white/[0.08]">
         <label for="inputSourceSelect" class="text-slate-400 pr-2 font-medium text-[11px]">Feed:</label>
         <select id="inputSourceSelect" class="bg-transparent text-slate-200 outline-none cursor-pointer font-mono text-[11px]">
-          <option value="camera" class="bg-slate-900">Live Camera</option>
-          <option value="demo_esp32" class="bg-slate-900" selected>Demo 1: Microcontroller IC (Step 1)</option>
+          <option value="demo_phone" class="bg-slate-900" selected>Real Video: Phone ESP / NodeMCU Board</option>
+          <option value="demo_esp32" class="bg-slate-900">Demo 1: Microcontroller IC (Step 1)</option>
           <option value="demo_cap" class="bg-slate-900">Demo 2: Ceramic Capacitor (Step 2)</option>
           <option value="demo_header" class="bg-slate-900">Demo 3: UART Header (Step 3)</option>
+          <option value="camera" class="bg-slate-900">Live Camera / USB Phone</option>
+          <option value="video_file" class="bg-slate-900">Upload Video File (.mp4)</option>
         </select>
+        <input type="file" id="videoFileInput" accept="video/mp4,video/webm,video/quicktime,video/x-m4v" class="hidden">
       </div>
+
+      <!-- In-Browser Record Demo Button -->
+      <button id="recordDemoBtn" class="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-lg bg-rose-500/10 text-rose-300 border border-rose-500/30 hover:bg-rose-500/20 transition cursor-pointer font-medium font-mono" title="Record HUD demo video">
+        <span id="recordDot" class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+        <span id="recordBtnText">Record Demo</span>
+      </button>
 
       <!-- Connection Status Badge -->
       <div id="connectionStatus" class="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
@@ -77,8 +86,8 @@
           <span id="feedModeLabel" class="font-mono text-slate-300 text-[11px]">DEMO FEED: ESP32 IC</span>
         </div>
         <div class="flex items-center gap-3.5 text-[11px]">
-          <span id="streamLatencyBadge" class="font-mono text-slate-400">Latency: ~180ms</span>
-          <span id="fpsCounter" class="font-mono text-emerald-400 font-semibold">FPS: 60</span>
+          <span id="streamLatencyBadge" class="font-mono text-slate-400">Latency: --</span>
+          <span id="fpsCounter" class="font-mono text-slate-400 font-semibold">FPS: --</span>
         </div>
       </div>
 
@@ -175,12 +184,12 @@
                 <span class="ai-waveform-bar"></span>
               </div>
             </span>
-            <span id="verificationStatus" class="text-xs font-bold text-emerald-400 flex items-center gap-1 font-mono">
-              ✓ Verified (96%)
+            <span id="verificationStatus" class="text-xs font-bold text-slate-400 flex items-center gap-1 font-mono">
+              Ready to verify
             </span>
           </div>
-          <p id="verificationFeedback" class="text-xs text-slate-400 leading-relaxed">
-            Microcontroller seated properly in socket U1. Orientation notch faces upward.
+          <p id="verificationFeedback" class="text-xs text-slate-500 leading-relaxed">
+            Press [Space] or click 'Verify Step' to analyze alignment with Muse Spark.
           </p>
         </div>
       </div>

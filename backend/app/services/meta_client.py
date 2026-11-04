@@ -62,12 +62,18 @@ DEFAULT_TARGET_SVGS = {
     )
 }
 
+def _is_valid_key(key: Optional[str]) -> bool:
+    if not key:
+        return False
+    k = key.strip().lower()
+    return not (k.startswith("your_") or "_here" in k or k in ("mock_key", "none", ""))
+
 class MetaModelAPIClient:
     """
     Client for Meta's Model API & Partner Endpoints (Baseten, Fireworks):
     - SAM 3.1: Zero-shot segmentation via /v1/responses
     - Muse Spark 1.3: Chain-of-thought physical reasoning via /v1/chat/completions
-    - Muse Image 1.0: Perspective-aligned visual target generation via /v1/responses
+    - Muse Image 1.0: Perspective-aligned visual target generation via /v1/images/generations
     """
 
     def __init__(self):
@@ -76,17 +82,17 @@ class MetaModelAPIClient:
         self.provider = "meta"
 
         # Wire partner model serving platforms for Meta Partner Prize Tracks
-        if settings.baseten_api_key and settings.baseten_api_key not in ("mock_key", "your_baseten_key_here", ""):
+        if _is_valid_key(settings.baseten_api_key):
             self.provider = "baseten"
             self.api_key = settings.baseten_api_key
             self.base_url = "https://bridge.baseten.co/v1"
             self.is_mock = False
-        elif settings.fireworks_api_key and settings.fireworks_api_key not in ("mock_key", "your_fireworks_key_here", ""):
+        elif _is_valid_key(settings.fireworks_api_key):
             self.provider = "fireworks"
             self.api_key = settings.fireworks_api_key
             self.base_url = "https://api.fireworks.ai/inference/v1"
             self.is_mock = False
-        elif self.api_key and self.api_key not in ("mock_key", "your_meta_model_api_key_here", ""):
+        elif _is_valid_key(self.api_key):
             self.provider = "meta"
             self.base_url = settings.meta_api_base_url
             self.is_mock = False
@@ -117,10 +123,10 @@ class MetaModelAPIClient:
             return {"Authorization": f"Api-Key {self.api_key}", "Content-Type": "application/json"}
         return {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
-    def get_http_client(self, timeout: float = 30.0) -> httpx.AsyncClient:
+    def get_http_client(self, timeout: float = 35.0) -> httpx.AsyncClient:
         """Returns a shared persistent AsyncClient with connection reuse."""
         if self._http_client is None or self._http_client.is_closed:
-            self._http_client = httpx.AsyncClient(timeout=timeout)
+            self._http_client = httpx.AsyncClient(timeout=35.0)
         return self._http_client
 
     async def close(self):
@@ -166,7 +172,10 @@ class MetaModelAPIClient:
                 "size": [h, w],
                 "counts": counts_str.encode("utf-8")
             }
-            decoded = mask_utils.decode(rle_dict)
+            import warnings
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=DeprecationWarning, message=r".*copy keyword.*")
+                decoded = mask_utils.decode(rle_dict)
             if decoded is None or not np.any(decoded):
                 return self._fallback_octagon_polygon(bbox)
 
@@ -391,8 +400,16 @@ class MetaModelAPIClient:
                 "next_action": str(parsed.get("next_action", "Proceed to next step"))
             }
         except Exception as e:
-            logger.warning(f"Muse Spark call encountered: {e}. Falling back to contextual reasoning.")
-            return self._mock_reasoning(context)
+            logger.error(f"Muse Spark call failed: {e}")
+            if self.is_mock:
+                return self._mock_reasoning(context)
+            return {
+                "step_verified": False,
+                "confidence": 0.0,
+                "reasoning": f"Verification unavailable: upstream model call failed ({e}).",
+                "anomalies": ["Model call failed"],
+                "next_action": "Check Meta API connection and retry verification."
+            }
 
     async def generate_task_steps_muse_spark(self, task_goal: str) -> List[Dict[str, Any]]:
         """Generate a 3-step physical procedure for an arbitrary task using Muse Spark 1.3."""
@@ -494,6 +511,30 @@ class MetaModelAPIClient:
             return svg_data
 
         headers = self._get_headers()
+        # 1. Primary: Official /images/generations endpoint for Muse Image 1.0
+        try:
+            client = self.get_http_client(timeout=45.0)
+            img_payload = {
+                "model": "muse-image-1.0",
+                "prompt": prompt,
+                "response_format": "b64_json"
+            }
+            response = await client.post(f"{self.base_url}/images/generations", headers=headers, json=img_payload, timeout=45.0)
+            if response.status_code == 200:
+                data = response.json()
+                items = data.get("data", [])
+                if items and items[0].get("b64_json"):
+                    b64 = items[0]["b64_json"]
+                    fmt = data.get("output_format", "webp")
+                    image_data = f"data:image/{fmt};base64,{b64}"
+                    _store(cache_key, image_data)
+                    if not is_custom:
+                        _store(f"step_{step_number}", image_data)
+                    return image_data
+        except Exception as img_err:
+            logger.warning(f"Muse Image /images/generations attempt: {img_err}")
+
+        # 2. Secondary: /responses fallback
         input_data: Any = prompt
         if reference_image_base64:
             img_url = reference_image_base64 if reference_image_base64.startswith("data:") else f"data:image/jpeg;base64,{reference_image_base64}"
@@ -504,8 +545,8 @@ class MetaModelAPIClient:
         }
 
         try:
-            client = self.get_http_client(timeout=12.0)
-            response = await client.post(f"{self.base_url}/responses", headers=headers, json=payload, timeout=12.0)
+            client = self.get_http_client(timeout=45.0)
+            response = await client.post(f"{self.base_url}/responses", headers=headers, json=payload, timeout=45.0)
             response.raise_for_status()
             data = response.json()
 
@@ -568,7 +609,7 @@ class MetaModelAPIClient:
                                 confidence=conf,
                                 bbox=bbox,
                                 polygon=self._fallback_octagon_polygon(bbox),
-                                attributes={"orientation_deg": 0.0, "pin_1_detected": True, "has_rle_mask": True}
+                                attributes={"orientation_deg": 0.0, "pin_1_detected": True, "has_rle_mask": False, "source": "offline_demo"}
                             )
                         )
                         if len(detected) >= 2:
@@ -584,13 +625,13 @@ class MetaModelAPIClient:
                     id="comp_1", label=primary_label, confidence=0.95,
                     bbox=BoundingBox(x_min=332.0, y_min=152.0, x_max=368.0, y_max=168.0),
                     polygon=self._fallback_octagon_polygon(BoundingBox(x_min=332.0, y_min=152.0, x_max=368.0, y_max=168.0)),
-                    attributes={"polarity_aligned": True}
+                    attributes={"polarity_aligned": True, "has_rle_mask": False, "source": "offline_demo"}
                 ),
                 SegmentedObject(
                     id="comp_2", label=secondary_label, confidence=0.92,
                     bbox=BoundingBox(x_min=330.0, y_min=150.0, x_max=370.0, y_max=170.0),
                     polygon=self._fallback_octagon_polygon(BoundingBox(x_min=330.0, y_min=150.0, x_max=370.0, y_max=170.0)),
-                    attributes={"target_pad": True}
+                    attributes={"target_pad": True, "has_rle_mask": False, "source": "offline_demo"}
                 )
             ]
         elif "header" in primary_label:
@@ -603,14 +644,16 @@ class MetaModelAPIClient:
                         "orientation_deg": 0.0,
                         "pin_count": 4,
                         "inter_pin_clearance_mm": 1.2,
-                        "solder_bridges_detected": False
+                        "solder_bridges_detected": False,
+                        "has_rle_mask": False,
+                        "source": "offline_demo"
                     }
                 ),
                 SegmentedObject(
                     id="comp_2", label=secondary_label, confidence=0.92,
                     bbox=BoundingBox(x_min=136.0, y_min=206.0, x_max=304.0, y_max=254.0),
                     polygon=self._fallback_octagon_polygon(BoundingBox(x_min=136.0, y_min=206.0, x_max=304.0, y_max=254.0)),
-                    attributes={"target_pad": True, "pin_count": 4}
+                    attributes={"target_pad": True, "pin_count": 4, "has_rle_mask": False, "source": "offline_demo"}
                 )
             ]
 
@@ -621,7 +664,7 @@ class MetaModelAPIClient:
                 confidence=0.96,
                 bbox=BoundingBox(x_min=180.0, y_min=140.0, x_max=300.0, y_max=260.0),
                 polygon=self._fallback_octagon_polygon(BoundingBox(x_min=180.0, y_min=140.0, x_max=300.0, y_max=260.0)),
-                attributes={"orientation_deg": 0.0, "pin_1_detected": True}
+                attributes={"orientation_deg": 0.0, "pin_1_detected": True, "has_rle_mask": False, "source": "offline_demo"}
             ),
             SegmentedObject(
                 id="comp_2",
@@ -629,7 +672,7 @@ class MetaModelAPIClient:
                 confidence=0.92,
                 bbox=BoundingBox(x_min=170.0, y_min=130.0, x_max=310.0, y_max=270.0),
                 polygon=self._fallback_octagon_polygon(BoundingBox(x_min=170.0, y_min=130.0, x_max=310.0, y_max=270.0)),
-                attributes={"polarity_aligned": True}
+                attributes={"polarity_aligned": True, "has_rle_mask": False, "source": "offline_demo"}
             )
         ]
 

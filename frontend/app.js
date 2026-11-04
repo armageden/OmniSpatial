@@ -33,7 +33,9 @@
   const presetBtns = document.querySelectorAll(".preset-btn");
 
   // Configuration (overridable via window.OMNISPATIAL_API_BASE)
-  const API_BASE = (window.OMNISPATIAL_API_BASE || "http://localhost:8000").replace(/\/$/, "");
+  const defaultHost = (typeof window !== "undefined" && window.location.hostname) ? window.location.hostname : "localhost";
+  const defaultBase = `http://${defaultHost}:8000`;
+  const API_BASE = (window.OMNISPATIAL_API_BASE || defaultBase).replace(/\/$/, "");
   const WS_BASE = API_BASE.replace(/^http/, "ws");
   const SEGMENT_COLORS = ["#00C6FF", "#00D26A", "#A78BFA", "#F59E0B", "#F472B6", "#38BDF8"];
 
@@ -47,7 +49,7 @@
   let streamInterval = null;
   let clientFrameId = 0;
   let currentStepNumber = 1;
-  let activeFeedMode = "demo_esp32";
+  let activeFeedMode = "demo_phone";
   let ghostOverlayActive = false;
   let currentTargetImageElement = null;
   let audioContext = null;
@@ -204,18 +206,23 @@
     }
   }
 
-  // Camera Management
+  // Camera & Video Management
   async function setupCamera() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 1280, height: 720 }
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          facingMode: { ideal: "environment" }
+        }
       });
       video.srcObject = stream;
+      video.removeAttribute("src");
       video.classList.remove("hidden");
       cameraPlaceholder.classList.add("hidden");
       video.onloadedmetadata = () => {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 360;
       };
     } catch (err) {
       console.warn("Camera access denied or unavailable, reverting to Demo Mode:", err);
@@ -229,6 +236,11 @@
       video.srcObject.getTracks().forEach(t => t.stop());
       video.srcObject = null;
     }
+    if (video.src) {
+      video.pause();
+      URL.revokeObjectURL(video.src);
+      video.removeAttribute("src");
+    }
     video.classList.add("hidden");
   }
 
@@ -240,6 +252,31 @@
     if (mode === "camera") {
       feedModeLabel.textContent = "LIVE CAMERA FEED";
       setupCamera();
+    } else if (mode === "video_file") {
+      feedModeLabel.textContent = "VIDEO FILE: SELECTING...";
+      const videoFileInput = document.getElementById("videoFileInput");
+      if (videoFileInput) {
+        videoFileInput.value = "";
+        videoFileInput.click();
+      }
+    } else if (mode === "demo_phone") {
+      stopCamera();
+      video.srcObject = null;
+      video.src = "esp32_phone_video.mp4";
+      video.loop = true;
+      video.muted = true;
+      video.playsInline = true;
+      video.onloadedmetadata = () => {
+        canvas.width = video.videoWidth || 720;
+        canvas.height = video.videoHeight || 1280;
+        video.play().catch(err => console.warn("Video play error:", err));
+      };
+      video.classList.remove("hidden");
+      cameraPlaceholder.classList.add("hidden");
+      feedModeLabel.textContent = "REAL VIDEO: PHONE ESP/NODEMCU";
+      if (syncStep && ws && ws.readyState === WebSocket.OPEN && currentStepNumber !== 1) {
+        ws.send(JSON.stringify({ action: "set_step", step_number: 1 }));
+      }
     } else {
       stopCamera();
       canvas.width = 640;
@@ -270,14 +307,14 @@
     lastFrameSendTime = performance.now();
     isAwaitingResponse = true;
     if (responseWatchdogTimeout) clearTimeout(responseWatchdogTimeout);
-    responseWatchdogTimeout = setTimeout(() => { isAwaitingResponse = false; }, 2500);
+    responseWatchdogTimeout = setTimeout(() => { isAwaitingResponse = false; }, 4000);
 
     const targetW = 640;
     const targetH = Math.round(640 * (canvas.height / canvas.width)) || 360;
 
     captureCanvas.width = targetW;
     captureCanvas.height = targetH;
-    if (activeFeedMode === "camera" && video.srcObject && video.readyState >= 2) {
+    if ((activeFeedMode === "camera" || activeFeedMode === "video_file" || activeFeedMode === "demo_phone") && (video.srcObject || video.src) && video.readyState >= 2) {
       captureCtx.drawImage(video, 0, 0, targetW, targetH);
     } else if (window.OmniSpatialDemo) {
       window.OmniSpatialDemo.renderDemoFrame(captureCtx, targetW, targetH, activeFeedMode);
@@ -294,7 +331,7 @@
       smooth: true,
       active_step: currentStepNumber,
       trigger_verify: triggerVerify,
-      allow_fallback: (activeFeedMode !== "camera" && !currentCustomPrompt),
+      allow_fallback: (activeFeedMode !== "camera" && activeFeedMode !== "video_file" && !currentCustomPrompt),
       custom_prompt: currentCustomPrompt || null,
       feed_mode: activeFeedMode
     };
@@ -331,8 +368,11 @@
     let html = '<span class="text-slate-400 font-medium text-[11px]">Active SAM 3.1 Targets:</span>';
     segments.forEach(seg => {
       const pct = Math.round((seg.confidence || 0.95) * 100);
-      const isRle = seg.attributes && seg.attributes.has_rle_mask;
-      const rleBadge = isRle ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono font-semibold">RLE CONTOUR</span>' : '';
+      const isRealRle = Boolean(seg.attributes && seg.attributes.source === "meta_sam_3.1" && seg.attributes.has_rle_mask);
+      const isDemo = Boolean(seg.attributes && seg.attributes.source === "offline_demo");
+      const rleBadge = isRealRle
+        ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono font-semibold">SAM 3.1 RLE</span>'
+        : (isDemo ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-slate-500/20 text-slate-400 font-mono font-semibold">DEMO TRACKER</span>' : '');
       const safeColor = escapeHtml(seg.color || "#94A3B8");
       const safeLabel = escapeHtml(seg.label || "");
       html += `
@@ -401,8 +441,8 @@
       }
     });
 
-    // Auto-sync demo feed to active step if not using live camera
-    if (activeFeedMode !== "camera") {
+    // Auto-sync demo feed to active step if not using live camera or phone video
+    if (activeFeedMode !== "camera" && activeFeedMode !== "video_file" && activeFeedMode !== "demo_phone") {
       const modeMap = { 1: "demo_esp32", 2: "demo_cap", 3: "demo_header" };
       const expectedMode = modeMap[activeStep.step_number] || "demo_esp32";
       if (activeFeedMode !== expectedMode) {
@@ -514,7 +554,13 @@
           emptyFrameCount = (emptyFrameCount || 0) + 1;
           if (emptyFrameCount >= 3) {
             currentSegments = [];
-            updateLegend([]);
+            if (activeFeedMode === "camera") {
+              if (segmentsLegend) {
+                segmentsLegend.innerHTML = '<span class="text-cyan-400 font-mono text-[11px] animate-pulse">Scanning live feed for target components... Align within reticle</span>';
+              }
+            } else {
+              updateLegend([]);
+            }
           }
         }
 
@@ -578,8 +624,8 @@
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 1. Draw Background Source (Camera or Procedural Demo PCB)
-    if (activeFeedMode !== "camera" && window.OmniSpatialDemo) {
+    // 1. Draw Background Source (Camera, Video File, or Procedural Demo PCB)
+    if (activeFeedMode !== "camera" && activeFeedMode !== "video_file" && activeFeedMode !== "demo_phone" && window.OmniSpatialDemo) {
       window.OmniSpatialDemo.renderDemoFrame(ctx, canvas.width, canvas.height, activeFeedMode);
     }
 
@@ -593,6 +639,23 @@
       ctx.setLineDash([4, 4]);
       ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
       ctx.setLineDash([]);
+      ctx.restore();
+    }
+
+    // 2.2 Central acquisition reticle when scanning in live camera or video mode
+    if ((activeFeedMode === "camera" || activeFeedMode === "video_file" || activeFeedMode === "demo_phone") && currentSegments.length === 0) {
+      ctx.save();
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      ctx.strokeStyle = "rgba(56, 189, 248, 0.45)";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6, 6]);
+      ctx.strokeRect(cx - 90, cy - 75, 180, 150);
+      ctx.setLineDash([]);
+      ctx.fillStyle = "rgba(56, 189, 248, 0.8)";
+      ctx.font = "bold 10px 'JetBrains Mono', monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("TARGET ACQUISITION ZONE", cx, cy + 92);
       ctx.restore();
     }
 
@@ -659,8 +722,9 @@
       }
 
       // Tag Label & 45° Dogleg Leader Line (Industrial Cleanroom AR Standard)
-      const isRleMask = seg.attributes && seg.attributes.has_rle_mask;
-      const tagText = isRleMask ? `[SAM 3.1 RLE] ${seg.label}` : `[SAM 3.1] ${seg.label}`;
+      const isRealRle = Boolean(seg.attributes && seg.attributes.source === "meta_sam_3.1" && seg.attributes.has_rle_mask);
+      const isDemo = Boolean(seg.attributes && seg.attributes.source === "offline_demo");
+      const tagText = isRealRle ? `[SAM 3.1 RLE] ${seg.label}` : (isDemo ? `[DEMO TRACKER] ${seg.label}` : `[SAM 3.1] ${seg.label}`);
       ctx.font = "bold 10px 'JetBrains Mono', monospace";
       const textWidth = ctx.measureText(tagText).width;
       const tagW = textWidth + 14;
@@ -881,6 +945,106 @@
     switchFeedMode(e.target.value);
   });
 
+  const videoFileInput = document.getElementById("videoFileInput");
+  if (videoFileInput) {
+    videoFileInput.addEventListener("change", (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) {
+        switchFeedMode("demo_esp32");
+        return;
+      }
+      stopCamera();
+      const fileUrl = URL.createObjectURL(file);
+      video.srcObject = null;
+      video.src = fileUrl;
+      video.loop = true;
+      video.muted = true;
+      video.playsInline = true;
+      video.onloadedmetadata = () => {
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 360;
+        video.play().catch(err => console.warn("Video play error:", err));
+      };
+      video.classList.remove("hidden");
+      cameraPlaceholder.classList.add("hidden");
+      feedModeLabel.textContent = `VIDEO: ${file.name.slice(0, 24).toUpperCase()}`;
+    });
+  }
+
+  // In-Browser MediaRecorder for Instant Demo Video Export
+  const recordDemoBtn = document.getElementById("recordDemoBtn");
+  const recordDot = document.getElementById("recordDot");
+  const recordBtnText = document.getElementById("recordBtnText");
+  let mediaRecorder = null;
+  let recordedChunks = [];
+  let recordTimer = null;
+  let recordSeconds = 0;
+
+  if (recordDemoBtn) {
+    recordDemoBtn.addEventListener("click", () => {
+      if (mediaRecorder && mediaRecorder.state === "recording") {
+        mediaRecorder.stop();
+        return;
+      }
+
+      if (typeof canvas.captureStream !== "function") {
+        alert("Canvas recording is not supported in this browser.");
+        return;
+      }
+
+      const stream = canvas.captureStream(30);
+      recordedChunks = [];
+      try {
+        const mimeType = (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported("video/webm;codecs=vp9"))
+          ? "video/webm;codecs=vp9"
+          : (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported("video/mp4") ? "video/mp4" : "video/webm");
+        mediaRecorder = new MediaRecorder(stream, { mimeType });
+      } catch (err) {
+        console.error("Failed to initialize MediaRecorder:", err);
+        return;
+      }
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          recordedChunks.push(e.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        if (recordTimer) clearInterval(recordTimer);
+        recordTimer = null;
+        if (recordDot) recordDot.className = "w-1.5 h-1.5 rounded-full bg-rose-500";
+        if (recordBtnText) recordBtnText.textContent = "Record Demo";
+        recordDemoBtn.classList.remove("bg-rose-600/30", "border-rose-400");
+
+        if (recordedChunks.length > 0) {
+          const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || "video/webm" });
+          const ext = (mediaRecorder.mimeType && mediaRecorder.mimeType.includes("mp4")) ? "mp4" : "webm";
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `omnispatial_demo_${Date.now()}.${ext}`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(url), 2000);
+        }
+      };
+
+      mediaRecorder.start(100);
+      recordSeconds = 0;
+      if (recordDot) recordDot.className = "w-1.5 h-1.5 rounded-full bg-rose-400 animate-ping";
+      recordDemoBtn.classList.add("bg-rose-600/30", "border-rose-400");
+      if (recordBtnText) recordBtnText.textContent = "Stop (00:00)";
+      recordTimer = setInterval(() => {
+        recordSeconds++;
+        const mm = String(Math.floor(recordSeconds / 60)).padStart(2, "0");
+        const ss = String(recordSeconds % 60).padStart(2, "0");
+        if (recordBtnText) recordBtnText.textContent = `Stop (${mm}:${ss})`;
+      }, 1000);
+    });
+  }
+
   verifyBtn.addEventListener("click", () => {
     triggerVerification();
   });
@@ -980,7 +1144,7 @@
 
   const urlParams = new URLSearchParams(window.location.search);
   const initialStep = Math.max(1, Math.min(3, parseInt(urlParams.get("step") || "1", 10)));
-  const initialFeed = urlParams.get("feed") || (initialStep === 2 ? "demo_cap" : (initialStep === 3 ? "demo_header" : "demo_esp32"));
+  const initialFeed = urlParams.get("feed") || (inputSourceSelect && inputSourceSelect.value ? inputSourceSelect.value : "demo_phone");
   
   if (urlParams.get("ghost") === "1" || urlParams.get("ghost") === "true") {
     ghostOverlayActive = true;
