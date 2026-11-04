@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     meta_api_base_url: str = "https://api.meta.ai/v1"
     modal_token_id: str = ""
     modal_token_secret: str = ""
+    baseten_api_key: str = ""
+    fireworks_api_key: str = ""
     debug: bool = False
     host: str = "0.0.0.0"
     port: int = 8000

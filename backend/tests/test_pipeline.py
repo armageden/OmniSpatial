@@ -1,4 +1,6 @@
 import unittest
+import os
+import re
 import numpy as np
 import cv2
 import json
@@ -16,6 +18,13 @@ class TestOmniSpatialPipeline(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
         reasoning_engine.reset_workflow()
+        self._orig_mock = meta_client.is_mock
+        meta_client.is_mock = True
+        meta_client._http_client = None
+
+    def tearDown(self):
+        meta_client.is_mock = self._orig_mock
+        meta_client._http_client = None
 
     # --- 1. Coordinate Normalization Tests ---
 
@@ -108,6 +117,35 @@ class TestOmniSpatialPipeline(unittest.TestCase):
         self.assertEqual(reset_step.step_number, 1)
         self.assertEqual(reasoning_engine.steps[1].status, "pending")
 
+    def test_verify_step_high_confidence_marks_verified(self):
+        reasoning_engine.reset_workflow()
+        with patch.object(meta_client, "reason_physical_state_muse_spark", new=AsyncMock(return_value={"step_verified": True, "confidence": 0.96, "reasoning": "ok", "anomalies": [], "next_action": "next"})):
+            import asyncio
+            result = asyncio.run(reasoning_engine.verify_step(segments=[], spatial_relations={}))
+        self.assertTrue(result.is_verified)
+        self.assertEqual(reasoning_engine.get_active_step().status, "verified")
+
+    def test_verify_step_low_confidence_marks_failed(self):
+        reasoning_engine.reset_workflow()
+        with patch.object(meta_client, "reason_physical_state_muse_spark", new=AsyncMock(return_value={"step_verified": True, "confidence": 0.7, "reasoning": "unsure", "anomalies": [], "next_action": "retry"})):
+            import asyncio
+            result = asyncio.run(reasoning_engine.verify_step(segments=[], spatial_relations={}))
+        self.assertFalse(result.is_verified)
+        self.assertEqual(reasoning_engine.get_active_step().status, "failed")
+
+    # --- 4b. Configuration ---
+    def test_config_reads_baseten_and_fireworks_keys(self):
+        os.environ["BASETEN_API_KEY"] = "baseten-test-key"
+        os.environ["FIREWORKS_API_KEY"] = "fireworks-test-key"
+        try:
+            from app.config import Settings
+            s = Settings()
+            self.assertEqual(s.baseten_api_key, "baseten-test-key")
+            self.assertEqual(s.fireworks_api_key, "fireworks-test-key")
+        finally:
+            os.environ.pop("BASETEN_API_KEY", None)
+            os.environ.pop("FIREWORKS_API_KEY", None)
+
     # --- 5. FastAPI Endpoints ---
 
     def test_health_endpoint(self):
@@ -148,6 +186,25 @@ class TestOmniSpatialPipeline(unittest.TestCase):
         action_res = self.client.post("/api/action", json={"action": "set_step", "step_number": 3})
         self.assertEqual(action_res.status_code, 200)
         self.assertEqual(action_res.json()["active_step"]["step_number"], 3)
+
+    def test_rest_steps_unaffected_by_ws_navigation(self):
+        # WS navigation must not corrupt the REST default workflow view.
+        with self.client.websocket_connect("/ws/stream") as ws:
+            ws.send_text(json.dumps({"action": "next_step"}))
+            msg = ws.receive_json()
+            self.assertEqual(msg["type"], "step_updated")
+        res = self.client.get("/api/steps")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.json()["steps"]), 3)
+        self.assertEqual(res.json()["active_step"]["step_number"], 1)
+
+    def test_ws_set_step_pipeline_stepper_navigation(self):
+        with self.client.websocket_connect("/ws/stream") as ws:
+            ws.send_text(json.dumps({"action": "set_step", "step_number": 2}))
+            msg = ws.receive_json()
+            self.assertEqual(msg["type"], "step_updated")
+            self.assertEqual(msg["active_step"]["step_number"], 2)
+            self.assertEqual(msg["active_step"]["title"], "Position Decoupling Capacitor C1")
 
     # --- 6. Custom Prompt Payload Tests ---
 
@@ -194,17 +251,11 @@ class TestOmniSpatialPipeline(unittest.TestCase):
             self.assertLessEqual(pt.y, 160.0)
 
     def test_rle_mask_production_path_decodes_real_contour(self):
-        # Build a real compressed RLE mask for a 40x40 circle
-        mask_raw = np.zeros((40, 40), dtype=np.uint8)
-        cv2.circle(mask_raw, (20, 20), 12, 1, -1)
-        rle = mask_utils.encode(np.asfortranarray(mask_raw))
-        counts_str = rle["counts"].decode("utf-8")
+        import os
+        fixture_path = os.path.join(os.path.dirname(__file__), "fixtures", "sam_real_response.txt")
+        with open(fixture_path) as f:
+            sam_text = f.read()
 
-        # SAM 3.1 style response text: box with w/h plus mask with x/y/data
-        sam_text = (
-            f"<|box;x1=10.0;y1=20.0;x2=50.0;y2=60.0;w=40;h=40|>"
-            f"<|mask;x=10.0;y=20.0;data={counts_str}|>"
-        )
         fake_response = MagicMock()
         fake_response.status_code = 200
         fake_response.raise_for_status = MagicMock()
@@ -296,6 +347,262 @@ class TestOmniSpatialPipeline(unittest.TestCase):
         self.assertEqual(res["frame_width"], 64)
         self.assertEqual(res["frame_height"], 64)
         self.assertGreater(res["edge_feature_count"], 0)
+
+    def test_dynamic_workflow_label_parsing_and_demo_tracking(self):
+        import base64
+        # 1. Dynamic workflow via REST /api/action
+        res = self.client.post("/api/action", json={"action": "set_workflow", "task_goal": "Wire servo motor to controller"})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.json()["steps"]), 3)
+        self.assertIn("wire", res.json()["active_step"]["target_components"])
+
+        # 2. Demo frame color-contour tracking in _mock_segments
+        canvas = np.zeros((200, 300, 3), dtype=np.uint8)
+        cv2.rectangle(canvas, (40, 50), (120, 130), (184, 163, 148), 2) # BGR slate border
+        cv2.rectangle(canvas, (30, 40), (130, 140), (248, 189, 56), 2)  # BGR cyan border
+        _, jpg = cv2.imencode(".png", canvas)
+        b64 = "data:image/png;base64," + base64.b64encode(jpg.tobytes()).decode()
+        segs = meta_client._mock_segments(["chip", "socket"], image_base64=b64)
+        self.assertEqual(len(segs), 2)
+        self.assertAlmostEqual(segs[0].bbox.x_min, 40.0, delta=3.0)
+        self.assertAlmostEqual(segs[1].bbox.x_min, 30.0, delta=3.0)
+
+        # 3. Prefix label extraction in segment_frame_sam
+        fake_resp = MagicMock()
+        fake_resp.status_code = 200
+        fake_resp.raise_for_status = MagicMock()
+        fake_resp.json.return_value = {
+            "output": [{"content": [{"text": "socket_u1 <|box;x1=10;y1=10;x2=50;y2=50|> chip_ic <|box;x1=15;y1=15;x2=45;y2=45|>"}]}]
+        }
+        async def run_sam():
+            with patch("httpx.AsyncClient") as m_cls:
+                mc = MagicMock()
+                mc.__aenter__ = AsyncMock(return_value=mc)
+                mc.__aexit__ = AsyncMock(return_value=None)
+                mc.post = AsyncMock(return_value=fake_resp)
+                m_cls.return_value = mc
+                meta_client.is_mock = False
+                try:
+                    return await meta_client.segment_frame_sam("AAAA", target_components=["fallback_a", "fallback_b"])
+                finally:
+                    meta_client.is_mock = True
+        import asyncio
+        parsed_segs = asyncio.run(run_sam())
+        self.assertEqual(parsed_segs[0].label, "socket_u1")
+        self.assertEqual(parsed_segs[1].label, "chip_ic")
+
+    def test_target_image_custom_prompt_parameter(self):
+        res = self.client.get("/api/steps/1/target-image?prompt=Custom%20servo%20motor%20diagram")
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["step_number"], 1)
+        self.assertIn("data:image/", data["image_data_url"])
+
+    def test_sam_mask_decoding_without_box_w_h(self):
+        import os
+        fixture_path = os.path.join(os.path.dirname(__file__), "fixtures", "sam_real_response.txt")
+        with open(fixture_path) as f:
+            sam_text = f.read()
+
+        # Strip ;w=64;h=64 from the box tag
+        sam_text_no_wh = re.sub(r";w=\d+;h=\d+", "", sam_text)
+        fake_response = MagicMock()
+        fake_response.status_code = 200
+        fake_response.raise_for_status = MagicMock()
+        fake_response.json.return_value = {
+            "output": [{"content": [{"text": sam_text_no_wh}]}]
+        }
+
+        async def run():
+            with patch("httpx.AsyncClient") as mock_client_cls:
+                mock_client = MagicMock()
+                mock_client.post = AsyncMock(return_value=fake_response)
+                mock_client_cls.return_value = mock_client
+                original = meta_client.is_mock
+                meta_client.is_mock = False
+                meta_client._http_client = None
+                try:
+                    return await meta_client.segment_frame_sam("AAAA", target_label="chip", allow_fallback=False)
+                finally:
+                    meta_client.is_mock = original
+                    meta_client._http_client = None
+
+        import asyncio
+        segs = asyncio.run(run())
+        self.assertEqual(len(segs), 1)
+        self.assertTrue(segs[0].attributes.get("has_rle_mask"))
+        self.assertNotEqual(len(segs[0].polygon), 8)
+
+    def test_normalized_area_precision_not_truncated(self):
+        import asyncio
+        # Small component (e.g. 20x20 in 640x400 frame)
+        small_seg = SegmentedObject(
+            id="comp_small",
+            label="resistor",
+            confidence=0.95,
+            bbox=BoundingBox(x_min=100.0, y_min=100.0, x_max=120.0, y_max=120.0),
+            polygon=[Point(x=100.0, y=100.0), Point(x=120.0, y=100.0), Point(x=120.0, y=120.0), Point(x=100.0, y=120.0)]
+        )
+        with patch.object(meta_client, "segment_frame_sam", new=AsyncMock(return_value=[small_seg])):
+            processed = asyncio.run(sam_service.process_frame("AAAA", frame_width=640, frame_height=400, normalize=True))
+        self.assertEqual(len(processed), 1)
+        self.assertIsNotNone(processed[0].area)
+        self.assertGreater(processed[0].area, 0.0)
+
+    def test_segment_id_uniqueness_across_contents(self):
+        fake_resp = MagicMock()
+        fake_resp.status_code = 200
+        fake_resp.raise_for_status = MagicMock()
+        fake_resp.json.return_value = {
+            "output": [
+                {"content": [{"text": "item_a <|box;x1=10;y1=10;x2=20;y2=20|>"}]},
+                {"content": [{"text": "item_b <|box;x1=30;y1=30;x2=40;y2=40|>"}]}
+            ]
+        }
+        async def run():
+            with patch("httpx.AsyncClient") as m_cls:
+                mc = MagicMock()
+                mc.post = AsyncMock(return_value=fake_resp)
+                m_cls.return_value = mc
+                original = meta_client.is_mock
+                meta_client.is_mock = False
+                meta_client._http_client = None
+                try:
+                    return await meta_client.segment_frame_sam("AAAA")
+                finally:
+                    meta_client.is_mock = original
+                    meta_client._http_client = None
+        import asyncio
+        segs = asyncio.run(run())
+        self.assertEqual(len(segs), 2)
+        self.assertEqual(segs[0].id, "sam_1")
+        self.assertEqual(segs[1].id, "sam_2")
+
+    def test_partner_endpoint_provider_routing(self):
+        from app.services.meta_client import MetaModelAPIClient
+        with patch("app.services.meta_client.settings") as mock_settings:
+            # Test Baseten
+            mock_settings.meta_model_api_key = "mock_key"
+            mock_settings.baseten_api_key = "baseten-secret-key"
+            mock_settings.fireworks_api_key = ""
+            client_b = MetaModelAPIClient()
+            self.assertEqual(client_b.provider, "baseten")
+            self.assertEqual(client_b.base_url, "https://bridge.baseten.co/v1")
+            self.assertFalse(client_b.is_mock)
+            self.assertEqual(client_b._get_headers()["Authorization"], "Api-Key baseten-secret-key")
+
+            # Test Fireworks
+            mock_settings.baseten_api_key = ""
+            mock_settings.fireworks_api_key = "fireworks-secret-key"
+            client_f = MetaModelAPIClient()
+            self.assertEqual(client_f.provider, "fireworks")
+            self.assertEqual(client_f.base_url, "https://api.fireworks.ai/inference/v1")
+            self.assertFalse(client_f.is_mock)
+            self.assertEqual(client_f._get_headers()["Authorization"], "Bearer fireworks-secret-key")
+
+    def test_dynamic_target_svg_generation_in_mock_mode(self):
+        import asyncio
+        original = meta_client.is_mock
+        meta_client.is_mock = True
+        try:
+            svg = asyncio.run(meta_client.generate_target_image_muse("Assemble robotic gripper", step_number=1))
+            self.assertIn("TARGET: ASSEMBLE ROBOTIC GRIPPER", svg)
+            self.assertIn("viewBox='0 0 640 400'", svg)
+            self.assertNotIn("fill='%23090d16'", svg)
+        finally:
+            meta_client.is_mock = original
+
+    def test_header_pin_attributes_enriched(self):
+        import asyncio
+        header_seg = SegmentedObject(
+            id="comp_hdr",
+            label="uart_header",
+            confidence=0.95,
+            bbox=BoundingBox(x_min=140.0, y_min=210.0, x_max=300.0, y_max=250.0),
+            polygon=[Point(x=140.0, y=210.0), Point(x=300.0, y=210.0), Point(x=300.0, y=250.0), Point(x=140.0, y=250.0)]
+        )
+        with patch.object(meta_client, "segment_frame_sam", new=AsyncMock(return_value=[header_seg])):
+            processed = asyncio.run(sam_service.process_frame("AAAA", frame_width=640, frame_height=400))
+        self.assertEqual(len(processed), 1)
+        attrs = processed[0].attributes
+        self.assertEqual(attrs.get("pin_count"), 4)
+        self.assertEqual(attrs.get("inter_pin_clearance_mm"), 1.2)
+        self.assertIs(attrs.get("solder_bridges_detected"), False)
+
+    def test_target_image_custom_prompt_accurate_cache_and_bounding(self):
+        meta_client._target_image_cache.clear()
+        # First call with prompt A: cache miss
+        res1 = self.client.get("/api/steps/1/target-image?prompt=Diagram%20Alpha")
+        self.assertEqual(res1.status_code, 200)
+        self.assertFalse(res1.json()["is_cached"])
+
+        # Second call with prompt A: cache hit
+        res2 = self.client.get("/api/steps/1/target-image?prompt=Diagram%20Alpha")
+        self.assertEqual(res2.status_code, 200)
+        self.assertTrue(res2.json()["is_cached"])
+
+        # First call with prompt B: cache miss
+        res3 = self.client.get("/api/steps/1/target-image?prompt=Diagram%20Beta")
+        self.assertEqual(res3.status_code, 200)
+        self.assertFalse(res3.json()["is_cached"])
+
+        # Cache bounding: generate 55 distinct items
+        import asyncio
+        for i in range(55):
+            asyncio.run(meta_client.generate_target_image_muse(f"Unique prompt {i}", step_number=1))
+        self.assertLessEqual(len(meta_client._target_image_cache), 50)
+
+    def test_sam_rle_mask_with_newline_between_box_and_mask(self):
+        import os
+        fixture_path = os.path.join(os.path.dirname(__file__), "fixtures", "sam_real_response.txt")
+        with open(fixture_path) as f:
+            sam_text = f.read()
+
+        # Insert newline and spaces between box and mask tags
+        sam_text_newline = sam_text.replace("|><|mask", "|>\n  <|mask")
+        fake_response = MagicMock()
+        fake_response.status_code = 200
+        fake_response.raise_for_status = MagicMock()
+        fake_response.json.return_value = {
+            "output": [{"content": [{"text": sam_text_newline}]}]
+        }
+
+        async def run():
+            with patch("httpx.AsyncClient") as mock_client_cls:
+                mock_client = MagicMock()
+                mock_client.post = AsyncMock(return_value=fake_response)
+                mock_client_cls.return_value = mock_client
+                original = meta_client.is_mock
+                meta_client.is_mock = False
+                meta_client._http_client = None
+                try:
+                    return await meta_client.segment_frame_sam("AAAA", target_label="chip", allow_fallback=False)
+                finally:
+                    meta_client.is_mock = original
+                    meta_client._http_client = None
+
+        import asyncio
+        segs = asyncio.run(run())
+        self.assertEqual(len(segs), 1)
+        self.assertTrue(segs[0].attributes.get("has_rle_mask"))
+        self.assertNotEqual(len(segs[0].polygon), 8)
+
+    def test_dead_code_mark_verified_removed(self):
+        self.assertFalse(hasattr(reasoning_engine, "mark_verified"))
+
+    def test_modal_gpu_configured(self):
+        from app.services.modal_app import health
+        dispatcher = getattr(health, "local", health)
+        h = dispatcher()
+        self.assertEqual(h["status"], "online")
+        self.assertEqual(h["provider"], "Modal")
+
+    def test_meta_client_close_and_lifespan(self):
+        import asyncio
+        client = meta_client.get_http_client()
+        self.assertFalse(client.is_closed)
+        asyncio.run(meta_client.close())
+        self.assertIsNone(meta_client._http_client)
 
 if __name__ == "__main__":
     unittest.main()

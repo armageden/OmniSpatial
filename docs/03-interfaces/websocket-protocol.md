@@ -32,6 +32,7 @@ Client can also send explicit action commands:
 {"action": "next_step"}
 {"action": "prev_step"}
 {"action": "reset_workflow"}
+{"action": "set_workflow", "task_goal": "Assemble custom hardware"}
 ```
 
 ### 2. Dual-Loop Server Response Payloads
@@ -94,6 +95,7 @@ Broadcast asynchronously when Muse Spark completes physical analysis without blo
 ```
 
 ## Error Handling & Disconnection
+- **Payload Size Ceiling:** Inbound JSON messages are capped at 3,000,000 characters (accommodating up to 2.5MB base64 video frames); oversized messages return `{"type": "error", "message": "message too large"}`.
 - `WebSocketDisconnect`: Handled cleanly with an informational log.
 - `Exception`: Logs error details and closes the connection to prevent orphaned background tasks.
 

@@ -16,21 +16,23 @@ app = modal.App("omnispatial-meta-hackathon")
 
 ## Container Image Specification
 - **Base OS:** `modal.Image.debian_slim(python_version="3.11")`
-- **Installed Packages:** `fastapi`, `uvicorn`, `numpy`, `pillow`, `opencv-python-headless`, `httpx`, `pycocotools`.
+- **Installed Packages:** `fastapi`, `uvicorn`, `numpy`, `pillow`, `opencv-python-headless`, `httpx`, `pycocotools`, `meta-sam-parser`.
 
 ## Functions & Endpoints
 
 ### 1. `process_frame_gpu(image_bytes: bytes, target_label: str = "components") -> dict`
-- **GPU Target:** `T4` (configurable to `A10G` or `L4`).
+- **GPU Target:** Configurable via environment variable `MODAL_GPU` (e.g. `MODAL_GPU=T4` when a payment method is attached; defaults to serverless CPU tier for free zero-card deployments).
 - **Execution Limits:** `timeout=60`, `scaledown_window=120`.
 - **Purpose:** Accelerated hardware inference for raw frame decoding, Laplacian blur/sharpness scoring, and candidate edge feature extraction.
 
 ### 2. `api_process_frame(payload: dict)`
 - **Decorator:** `@modal.fastapi_endpoint(method="POST")`
+- **Endpoint:** `https://farhantanvir277--omnispatial-meta-hackathon-api-process-frame.us-east.modal.run`
 - **Purpose:** Public HTTP POST endpoint accepting base64 images for GPU frame processing.
 
 ### 3. `health() -> dict`
 - **Decorator:** `@modal.fastapi_endpoint(method="GET")`
+- **Endpoint:** `https://farhantanvir277--omnispatial-meta-hackathon-health.us-east.modal.run`
 - **Purpose:** Public HTTP health check returning service status and GPU enablement.
 
 ## Deployment Commands

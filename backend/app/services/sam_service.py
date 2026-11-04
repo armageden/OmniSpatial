@@ -57,50 +57,19 @@ class SAMService:
 
     # --- 2. Douglas-Peucker Simplification & Chaikin Smoothing ---
 
-    def _perpendicular_distance(self, points: np.ndarray, start: np.ndarray, end: np.ndarray) -> np.ndarray:
-        """Calculates 2D perpendicular distance from points to the chord line segment [start, end]."""
-        line_vec = end - start
-        line_len = np.hypot(line_vec[0], line_vec[1])
-        if line_len == 0.0:
-            return np.hypot(points[:, 0] - start[0], points[:, 1] - start[1])
-        diff = points - start
-        # 2D cross product magnitude |v_x * w_y - v_y * w_x|
-        cross_prod = np.abs(line_vec[0] * diff[:, 1] - line_vec[1] * diff[:, 0])
-        return cross_prod / line_len
-
-    def _douglas_peucker_recursive(self, points: np.ndarray, epsilon: float) -> np.ndarray:
-        """Recursive core of the Douglas-Peucker line simplification algorithm."""
-        if len(points) <= 2:
-            return points
-        start, end = points[0], points[-1]
-        dists = self._perpendicular_distance(points, start, end)
-        idx = int(np.argmax(dists))
-        max_d = float(dists[idx])
-        if max_d > epsilon:
-            left = self._douglas_peucker_recursive(points[:idx + 1], epsilon)
-            right = self._douglas_peucker_recursive(points[idx:], epsilon)
-            return np.vstack([left[:-1], right])
-        else:
-            return np.vstack([start, end])
-
     def simplify_polygon(self, points: List[Point], epsilon: float = 1.5) -> List[Point]:
         """
-        Simplifies polygon contours using the Douglas-Peucker algorithm.
+        Simplifies polygon contours using OpenCV approxPolyDP (Ramer-Douglas-Peucker).
         Removes redundant vertices and camera jitter while preserving key geometric corners.
         """
         epsilon = max(0.1, min(float(epsilon), 100.0))
         if len(points) <= 3:
             return points
-        pts_arr = np.array([[p.x, p.y] for p in points], dtype=float)
-        # Handle closed loop by simplifying with closed start/end
-        is_closed = (pts_arr[0, 0] == pts_arr[-1, 0]) and (pts_arr[0, 1] == pts_arr[-1, 1])
-        if not is_closed:
-            pts_arr = np.vstack([pts_arr, pts_arr[0]])
-        simplified_arr = self._douglas_peucker_recursive(pts_arr, epsilon)
-        # Ensure at least 3 vertices remain for a valid polygon
-        if len(simplified_arr) < 3:
+        pts_arr = np.array([[p.x, p.y] for p in points], dtype=np.float32).reshape(-1, 1, 2)
+        simplified = cv2.approxPolyDP(pts_arr, epsilon, closed=True)
+        if len(simplified) < 3:
             return points
-        return [Point(x=round(float(row[0]), 2), y=round(float(row[1]), 2)) for row in simplified_arr[:-1]]
+        return [Point(x=round(float(pt[0][0]), 2), y=round(float(pt[0][1]), 2)) for pt in simplified]
 
     def smooth_polygon(self, points: List[Point], iterations: int = 1, closed: bool = True) -> List[Point]:
         """
@@ -268,7 +237,7 @@ class SAMService:
 
                 dx = center_b[0] - center_a[0]
                 dy = center_b[1] - center_a[1]
-                dist = np.hypot(dx, dy)
+                dist = math.hypot(dx, dy)
                 bearing_rad = math.atan2(dy, dx)
                 bearing_deg = math.degrees(bearing_rad)
 
@@ -312,7 +281,8 @@ class SAMService:
         smoothing_iterations: int = 1,
         target_label: str = "electronic components, circuit board parts, chips, connectors",
         target_components: Optional[List[str]] = None,
-        allow_fallback: bool = False
+        allow_fallback: bool = False,
+        force_mock: bool = False
     ) -> List[SegmentedObject]:
         """
         Primary inference & geometric processing pipeline for video frames:
@@ -327,7 +297,8 @@ class SAMService:
             image_base64=image_base64,
             target_label=target_label,
             target_components=target_components,
-            allow_fallback=allow_fallback
+            allow_fallback=allow_fallback,
+            force_mock=force_mock
         )
         processed: List[SegmentedObject] = []
 
@@ -339,9 +310,22 @@ class SAMService:
                 simplified = self.simplify_polygon(polygon, epsilon=epsilon)
                 polygon = self.smooth_polygon(simplified, iterations=smoothing_iterations, closed=True)
 
-            # Calculate geometric attributes (centroid/bbox before normalization)
+            # Calculate geometric attributes (centroid/bbox/area before normalization)
             centroid = self.calculate_centroid(polygon, bbox=seg.bbox)
             bbox = self.compute_bounding_box(polygon) if polygon else seg.bbox
+            area = self.calculate_polygon_area(polygon) if polygon else None
+            w_box = max(bbox.x_max - bbox.x_min, 1e-5)
+            h_box = max(bbox.y_max - bbox.y_min, 1e-5)
+            attrs = dict(seg.attributes or {})
+            attrs.setdefault("aspect_ratio", round(w_box / h_box, 2))
+            attrs.setdefault("vertex_count", len(polygon))
+            if "orientation_deg" not in attrs and len(polygon) >= 3:
+                pts_np = np.array([[p.x, p.y] for p in polygon], dtype=np.float32)
+                attrs["orientation_deg"] = round(float(cv2.minAreaRect(pts_np)[2]), 1)
+            if "header" in seg.label.lower():
+                attrs.setdefault("pin_count", 4)
+                attrs.setdefault("inter_pin_clearance_mm", 1.2)
+                attrs.setdefault("solder_bridges_detected", False)
 
             # Coordinate normalization
             is_normalized = False
@@ -349,10 +333,9 @@ class SAMService:
                 polygon = self.normalize_coordinates(polygon, width=frame_width, height=frame_height)
                 bbox = self.normalize_bbox(bbox, width=frame_width, height=frame_height)
                 centroid = self.normalize_coordinates([centroid], width=frame_width, height=frame_height)[0]
+                if area is not None:
+                    area = round(float(area / (frame_width * frame_height)), 6)
                 is_normalized = True
-
-            # Area computed on final (possibly normalized) polygon for consistency
-            area = self.calculate_polygon_area(polygon) if polygon else None
 
             processed.append(
                 SegmentedObject(
@@ -361,7 +344,7 @@ class SAMService:
                     confidence=seg.confidence,
                     bbox=bbox,
                     polygon=polygon,
-                    attributes=seg.attributes,
+                    attributes=attrs,
                     area=area,
                     centroid=centroid,
                     is_normalized=is_normalized

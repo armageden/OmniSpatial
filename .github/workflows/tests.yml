@@ -1,0 +1,30 @@
+name: Backend Tests
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Dependencies
+        run: python3 -m pip install -r backend/requirements.txt
+
+      - name: Run Unit Tests
+        run: PYTHONPATH=backend python3 -m unittest discover -s backend/tests -v
+
+      - name: Run Mechanical Docs Check
+        run: python3 scripts/docs_check.py

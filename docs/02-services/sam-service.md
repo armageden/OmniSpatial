@@ -10,12 +10,12 @@ Responsible for processing raw video frames through SAM 3.1, transforming low-le
 
 ### Core Methods
 
-#### 1. `process_frame(image_base64: str, frame_width: Optional[int] = None, frame_height: Optional[int] = None, normalize: bool = False, smooth: bool = True, epsilon: float = 1.5, smoothing_iterations: int = 1, target_label: str = "electronic components, circuit board parts, chips, connectors", target_components: Optional[List[str]] = None, allow_fallback: bool = False) -> List[SegmentedObject]`
+#### 1. `process_frame(image_base64: str, frame_width: Optional[int] = None, frame_height: Optional[int] = None, normalize: bool = False, smooth: bool = True, epsilon: float = 1.5, smoothing_iterations: int = 1, target_label: str = "electronic components, circuit board parts, chips, connectors", target_components: Optional[List[str]] = None, allow_fallback: bool = False, force_mock: bool = False) -> List[SegmentedObject]`
 - Calls `meta_client.segment_frame_sam(image_base64, target_label, target_components, allow_fallback)`.
 - Parses raw mask coordinates into clean vertex polygons via `parse_polygon`.
 - Applies Douglas-Peucker polygon simplification with tolerance `epsilon` to strip high-frequency camera noise while preserving sharp corners.
 - Applies Chaikin's corner-cutting algorithm with `smoothing_iterations` for smooth HUD canvas rendering.
-- Calculates surface area via Shoelace formula and centroid coordinates.
+- Calculates surface area via Shoelace formula, centroid coordinates, and geometric attributes (`aspect_ratio`, `vertex_count`, `orientation_deg` via `cv2.minAreaRect`, and pin clearance metrics `pin_count`, `inter_pin_clearance_mm`, `solder_bridges_detected` for connector/header inspections).
 - Optionally converts absolute pixel coordinates into normalized `[0.0, 1.0]` coordinate space when `normalize=True` and dimensions are provided.
 - Returns an array of `SegmentedObject` instances.
 
@@ -35,7 +35,7 @@ Responsible for processing raw video frames through SAM 3.1, transforming low-le
 - `denormalize_bbox(bbox: BoundingBox, width: float, height: float) -> BoundingBox`: Denormalizes bounding box boundaries.
 
 #### 4. Geometry & Contour Algorithms
-- `simplify_polygon(points: List[Point], epsilon: float = 1.5) -> List[Point]`: Recursive Douglas-Peucker simplification using vector perpendicular distances, with input clamping for bounds safety.
+- `simplify_polygon(points: List[Point], epsilon: float = 1.5) -> List[Point]`: Douglas-Peucker simplification powered by OpenCV `approxPolyDP`, with input clamping for bounds safety.
 - `smooth_polygon(points: List[Point], iterations: int = 1, closed: bool = True) -> List[Point]`: Chaikin's corner subdivision smoothing algorithm, with iterations bounded to `[0, 5]`.
 - `parse_polygon(raw_polygon: Any) -> List[Point]`: Robust parser accepting `Point` models, dictionaries, coordinate tuples, or NumPy arrays.
 - `trace_binary_mask(mask: np.ndarray, min_area: float = 20.0) -> List[Point]`: Boundary tracing algorithm for 2D binary segmentation masks powered by OpenCV contour detection.

@@ -7,7 +7,7 @@ set -e
 echo "🚀 Checking Modal CLI..."
 if ! command -v modal &> /dev/null; then
     echo "⚠️ Modal CLI not found in PATH. Using virtual environment modal..."
-    export PATH="backend/.venv/bin:$PATH"
+    export PATH=".venv/bin:backend/.venv/bin:$PATH"
 fi
 
 echo "📦 Validating Modal App syntax..."

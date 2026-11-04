@@ -11,3 +11,4 @@ Utilize Modal (`modal>=0.62.0`) as defined in `backend/app/services/modal_app.py
 ## Consequences
 - **Positive:** Zero idle infrastructure costs, automatic containerization, straightforward Python-native deployment decorators, and seamless GPU access.
 - **Negative:** Cold start latency on initial request invocation (~5-15s), after which warm containers execute with native GPU speed.
+- **Status note:** Modal is an *optional* offload/deployment (`backend/app/services/modal_app.py`); the real-time WebSocket frame path in `backend/app/main.py` does not invoke it, to avoid adding a network round-trip to the 5 FPS loop. Treat Modal as opt-in.

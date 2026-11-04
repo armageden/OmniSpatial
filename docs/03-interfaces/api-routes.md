@@ -34,11 +34,12 @@
 - `POST /api/steps/prev`: Navigates to previous assembly step.
 - `POST /api/steps/reset`: Resets full procedure to Step 1.
 - `POST /api/steps/set/{step_number}`: Jumps directly to specified step.
-- `POST /api/action`: Universal REST action controller accepting `StreamActionRequest` (`next_step`, `prev_step`, `reset_workflow`, `set_step`).
+- `POST /api/action`: Universal REST action controller accepting `StreamActionRequest` (`next_step`, `prev_step`, `reset_workflow`, `set_step`, `set_workflow`).
 
 ### 3. Synthesized Visual Target Blueprint
 - **Route:** `GET /api/steps/{step_number}/target-image`
-- **Handler:** `async def get_target_image(step_number: int)`
+- **Handler:** `async def get_target_image(step_number: int, prompt: Optional[str] = None)`
+- **Query Parameters:** `prompt` (optional string override for custom workflow diagrams)
 - **Response Format:**
   ```json
   {

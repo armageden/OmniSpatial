@@ -15,16 +15,16 @@ DEFAULT_STEPS = [
         step_number=2,
         title="Position Decoupling Capacitor C1",
         description="Insert 100nF ceramic capacitor into pads C1 next to VCC rail.",
-        target_components=["decoupling_capacitor_c1", "microcontroller_chip"],
-        verification_criteria="decoupling_capacitor_c1 within 10mm of microcontroller_chip VCC pin",
+        target_components=["decoupling_capacitor_c1", "pads_c1"],
+        verification_criteria="decoupling_capacitor_c1 aligned on pads C1 within 10mm of microcontroller_chip VCC pin",
         status="pending"
     ),
     TaskStep(
         step_number=3,
         title="Solder Header Pins",
         description="Solder 4-pin UART communication header cleanly across pads J1.",
-        target_components=["uart_header"],
-        verification_criteria="4 pins present, no solder bridges between adjacent pads",
+        target_components=["uart_header", "pads_j1"],
+        verification_criteria="4 pins present across pads J1, no solder bridges between adjacent pads",
         status="pending"
     )
 ]
@@ -50,11 +50,6 @@ class ReasoningEngine:
             self.steps[self.current_step_idx].status = "in_progress"
             self.last_verification = None
         return self.get_active_step()
-
-    def mark_verified(self, step_number: int) -> None:
-        """Mark a step verified (only via successful verification)."""
-        idx = max(0, min(step_number - 1, len(self.steps) - 1))
-        self.steps[idx].status = "verified"
 
     def previous_step(self) -> TaskStep:
         """Navigate back to the prior step."""
@@ -87,11 +82,33 @@ class ReasoningEngine:
         self.last_verification = None
         return self.get_active_step()
 
+    async def load_custom_workflow(self, task_goal: str) -> TaskStep:
+        """Generate and load a dynamic 3-step workflow for an arbitrary task goal."""
+        raw_steps = await meta_client.generate_task_steps_muse_spark(task_goal)
+        built: List[TaskStep] = []
+        for idx, item in enumerate(raw_steps[:3]):
+            built.append(
+                TaskStep(
+                    step_number=idx + 1,
+                    title=str(item.get("title", f"Step {idx + 1}")),
+                    description=str(item.get("description", task_goal)),
+                    target_components=[str(c) for c in (item.get("target_components") or ["primary_part", "base_mount"])],
+                    verification_criteria=str(item.get("verification_criteria", "Components aligned within tolerance")),
+                    status="in_progress" if idx == 0 else "pending"
+                )
+            )
+        if built:
+            self.steps = built
+            self.current_step_idx = 0
+            self.last_verification = None
+        return self.get_active_step()
+
     async def verify_step(
         self,
         segments: List[SegmentedObject],
         spatial_relations: Dict[str, Any],
-        auto_advance: bool = False
+        auto_advance: bool = False,
+        image_base64: str = ""
     ) -> VerificationResult:
         active_step = self.get_active_step()
 
@@ -103,20 +120,24 @@ class ReasoningEngine:
             f"Spatial relations: {spatial_relations}"
         )
 
-        response = await meta_client.reason_physical_state_muse_spark(
-            prompt=prompt,
-            context={"step": active_step.model_dump()}
-        )
+        call_kwargs: Dict[str, Any] = {
+            "prompt": prompt,
+            "context": {"step": active_step.model_dump(), "spatial_relations": spatial_relations}
+        }
+        if image_base64:
+            call_kwargs["image_base64"] = image_base64
+        response = await meta_client.reason_physical_state_muse_spark(**call_kwargs)
 
-        is_verified = bool(response.get("step_verified", False))
+        raw_verified = bool(response.get("step_verified", False))
         confidence = float(response.get("confidence", 0.95))
+        is_verified = raw_verified and confidence >= 0.85
 
-        if is_verified and confidence >= 0.85:
+        if is_verified:
             active_step.status = "verified"
             if auto_advance and self.current_step_idx + 1 < len(self.steps):
                 self.current_step_idx += 1
                 self.steps[self.current_step_idx].status = "in_progress"
-        elif not is_verified:
+        else:
             active_step.status = "failed"
 
         result = VerificationResult(

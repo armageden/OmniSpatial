@@ -52,12 +52,14 @@ class FrameAnalysisPayload(BaseModel):
     trigger_verify: bool = False
     custom_prompt: Optional[str] = None
     allow_fallback: bool = False
+    feed_mode: Optional[str] = None
 
     model_config = ConfigDict(extra="ignore")
 
 class StreamActionRequest(BaseModel):
-    action: str # verify_step | next_step | prev_step | reset_workflow | set_step
+    action: str # verify_step | next_step | prev_step | reset_workflow | set_step | set_workflow
     step_number: Optional[int] = None
+    task_goal: Optional[str] = None
 
     model_config = ConfigDict(extra="ignore")
 

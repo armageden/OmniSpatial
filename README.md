@@ -12,7 +12,7 @@
 1. **Zero-Shot Spatial Perception (SAM 3.1 via Meta Model API)**: Segments parts, pins, components, and tools on-the-fly without requiring custom-trained object detection models.
 2. **Physical State Reasoning (Muse Spark Series)**: Ingests segmented mask topologies, component positions, and task instructions to verify step completion and detect misalignments or polarity errors.
 3. **Photorealistic Visual Target Synthesis (Muse Image)**: Generates perspective-accurate previews of how the next step or corrected state should look directly from the user's viewing angle.
-4. **Sub-Second Streaming Infrastructure (Modal Serverless GPUs)**: Handles video frame decoding, inference routing, and low-latency WebSocket communication.
+4. **Streaming Infrastructure (FastAPI WebSockets)**: Low-latency bidirectional streaming; Modal serverless GPUs are an optional offload/deployment (see `backend/app/services/modal_app.py`), not on the critical path.
 
 ---
 
@@ -76,23 +76,29 @@ meta-hackathon/
 
 ### 1. Prerequisites
 - Python 3.10+
-- Meta Model API Key (`META_MODEL_API_KEY`)
+- Meta Model API Key (`META_MODEL_API_KEY`) or Baseten / Fireworks partner keys (optional; runs in self-contained mock evaluation mode out-of-the-box)
 - Modal Token (optional for serverless GPU worker deployment)
 
-### 2. Backend Setup
+### 2. Fast Setup (Make)
 ```bash
-cd backend
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-# Edit .env with your META_MODEL_API_KEY
-PYTHONPATH=. uvicorn app.main:app --reload --port 8000
+make setup
+make dev-backend
+# In another terminal:
+make dev-frontend
 ```
 
-### 3. Frontend HUD Setup
-The frontend is a lightweight, zero-dependency HTML5 Canvas AR HUD:
+### 3. Manual Setup
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r backend/requirements.txt
+cp backend/.env.example backend/.env
+# Edit backend/.env if you have live META_MODEL_API_KEY, BASETEN_API_KEY, or FIREWORKS_API_KEY
+
+# Launch Backend:
+PYTHONPATH=backend uvicorn app.main:app --app-dir backend --reload --port 8000
+
+# Launch Frontend:
 python3 -m http.server 3000 --directory frontend
 ```
 Then navigate to `http://localhost:3000` in your browser.

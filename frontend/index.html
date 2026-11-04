@@ -3,224 +3,250 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OmniSpatial — Meta Horizon Spatial AI Copilot</title>
+  <title>OmniSpatial Studio — Meta Horizon Zero-Shot Physical AI Copilot</title>
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="min-h-screen flex flex-col antialiased selection:bg-blue-600 selection:text-white">
+<body class="min-h-screen flex flex-col antialiased selection:bg-blue-600 selection:text-white bg-[#0B0E14] text-slate-100 overflow-x-hidden">
 
-  <!-- Top Navigation Bar (Meta Horizon Glass) -->
-  <header class="border-b border-blue-500/20 bg-[#080d1a]/85 backdrop-blur-xl px-6 py-3 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-50 shadow-lg shadow-black/40">
-    <div class="flex items-center space-x-3.5">
-      <!-- Authentic Meta Brand Ribbon Infinity Glyph -->
-      <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#0866FF]/20 to-[#00C6FF]/10 border border-blue-500/30 flex items-center justify-center shadow-lg shadow-blue-500/20 ring-1 ring-white/10">
-        <svg class="w-6 h-6 shrink-0 drop-shadow-[0_0_8px_rgba(8,102,255,0.6)]" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <linearGradient id="metaLogoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#0866FF" />
-              <stop offset="50%" stop-color="#0081FB" />
-              <stop offset="100%" stop-color="#00C6FF" />
-            </linearGradient>
-          </defs>
-          <path d="M11.5 9.5C6.8 9.5 3 13.3 3 18C3 22.7 6.8 26.5 11.5 26.5C14.8 26.5 17.6 24.6 19 21.8C20.4 24.6 23.2 26.5 26.5 26.5C31.2 26.5 35 22.7 35 18C35 13.3 31.2 9.5 26.5 9.5C23.2 9.5 20.4 11.4 19 14.2C17.6 11.4 14.8 9.5 11.5 9.5ZM11.5 13.5C14 13.5 16 15.5 16 18C16 20.5 14 22.5 11.5 22.5C9 22.5 7 20.5 7 18C7 15.5 9 13.5 11.5 13.5ZM26.5 13.5C29 13.5 31 15.5 31 18C31 20.5 29 22.5 26.5 22.5C24 22.5 22 20.5 22 18C22 15.5 24 13.5 26.5 13.5Z" fill="url(#metaLogoGrad)"/>
+  <!-- Top Studio Navigation Bar (Meta Horizon OS Standard) -->
+  <header class="h-12 border-b border-white/[0.08] bg-[#0E131F]/90 backdrop-blur-md px-5 flex items-center justify-between gap-4 sticky top-0 z-50 shrink-0">
+    <!-- Brand / Title -->
+    <div class="flex items-center space-x-3 shrink-0">
+      <div class="w-7 h-7 rounded-lg bg-[#0866FF]/15 border border-[#0866FF]/30 flex items-center justify-center">
+        <svg class="w-4 h-4 text-[#0866FF]" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M11.5 9.5C6.8 9.5 3 13.3 3 18C3 22.7 6.8 26.5 11.5 26.5C14.8 26.5 17.6 24.6 19 21.8C20.4 24.6 23.2 26.5 26.5 26.5C31.2 26.5 35 22.7 35 18C35 13.3 31.2 9.5 26.5 9.5C23.2 9.5 20.4 11.4 19 14.2C17.6 11.4 14.8 9.5 11.5 9.5ZM11.5 13.5C14 13.5 16 15.5 16 18C16 20.5 14 22.5 11.5 22.5C9 22.5 7 20.5 7 18C7 15.5 9 13.5 11.5 13.5ZM26.5 13.5C29 13.5 31 15.5 31 18C31 20.5 29 22.5 26.5 22.5C24 22.5 22 20.5 22 18C22 15.5 24 13.5 26.5 13.5Z" fill="#0866FF"/>
         </svg>
       </div>
-
-      <div>
-        <div class="flex items-center gap-2">
-          <h1 class="font-extrabold text-base tracking-tight text-white flex items-center gap-2">
-            OmniSpatial <span class="meta-gradient-text">Horizon</span>
-          </h1>
-          <span class="meta-ai-pill text-[10px] px-2.5 py-0.5 rounded-full text-blue-300 font-mono font-medium flex items-center gap-1.5">
-            <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
-            SAM 3.1 + Muse Spark
-          </span>
-        </div>
-        <p class="text-[11px] text-slate-400 font-medium">Meta Horizon Zero-Shot Physical AI Copilot</p>
+      <div class="flex items-center gap-2">
+        <span class="font-bold text-sm tracking-tight text-white">OmniSpatial</span>
+        <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-white/[0.06] text-slate-300 border border-white/[0.08]">Studio</span>
+        <span class="text-[10px] font-mono text-slate-500 hidden sm:inline">SAM 3.1 + Muse Spark</span>
       </div>
     </div>
 
-    <!-- Quick Action Ergonomic Toolbar -->
-    <div class="flex items-center gap-2.5 flex-wrap">
+    <!-- Center Connected Pipeline Stepper -->
+    <div id="pipelineStepper" class="stepper-container hidden md:flex">
+      <button class="stepper-node active" data-step="1">
+        <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span> 01 IC CHIP
+      </button>
+      <span class="stepper-line"></span>
+      <button class="stepper-node" data-step="2">
+        <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span> 02 CAPACITOR
+      </button>
+      <span class="stepper-line"></span>
+      <button class="stepper-node" data-step="3">
+        <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span> 03 UART
+      </button>
+    </div>
+
+    <!-- Right Controls -->
+    <div class="flex items-center gap-3 shrink-0">
       <!-- Input Source Selector -->
-      <div class="flex items-center meta-glass-subtle rounded-full px-2 py-1 text-xs border border-blue-500/20">
-        <label for="inputSourceSelect" class="text-slate-400 px-2 font-medium text-[11px]">Feed:</label>
-        <select id="inputSourceSelect" class="bg-slate-900/90 text-slate-200 rounded-full px-2.5 py-1 outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer font-mono text-[11px]">
-          <option value="camera">📹 Live Webcam</option>
-          <option value="demo_esp32" selected>🧪 Demo: ESP32 IC Assembly</option>
-          <option value="demo_cap">🔬 Demo: Decoupling Capacitor</option>
-          <option value="demo_header">⚡ Demo: UART 4-Pin Header</option>
+      <div class="flex items-center bg-slate-900/80 rounded-lg px-2.5 py-1 text-xs border border-white/[0.08]">
+        <label for="inputSourceSelect" class="text-slate-400 pr-2 font-medium text-[11px]">Feed:</label>
+        <select id="inputSourceSelect" class="bg-transparent text-slate-200 outline-none cursor-pointer font-mono text-[11px]">
+          <option value="camera" class="bg-slate-900">Live Camera</option>
+          <option value="demo_esp32" class="bg-slate-900" selected>Demo 1: Microcontroller IC (Step 1)</option>
+          <option value="demo_cap" class="bg-slate-900">Demo 2: Ceramic Capacitor (Step 2)</option>
+          <option value="demo_header" class="bg-slate-900">Demo 3: UART Header (Step 3)</option>
         </select>
       </div>
 
-      <!-- Verify Button -->
-      <button id="verifyBtn" class="meta-btn-primary flex items-center gap-1.5 text-xs font-semibold px-4 py-1.5 rounded-full transition cursor-pointer">
-        <span id="verifyBtnIcon">🔍</span> Verify Step <span class="hidden sm:inline opacity-70 text-[10px] font-mono tracking-tight">[Space]</span>
-      </button>
-
-      <!-- Step Navigation Pill -->
-      <div class="flex items-center meta-glass-subtle rounded-full p-0.5 border border-blue-500/20 text-xs">
-        <button id="prevStepBtn" title="Previous Step" class="px-2.5 py-1 text-slate-300 hover:text-white hover:bg-blue-600/20 rounded-full transition">◀</button>
-        <span id="stepCounterIndicator" class="px-2 text-xs font-mono text-cyan-300 font-semibold">1/3</span>
-        <button id="nextStepBtn" title="Next Step" class="px-2.5 py-1 text-slate-300 hover:text-white hover:bg-blue-600/20 rounded-full transition">▶</button>
-      </div>
-
-      <!-- Ghost Overlay Toggle -->
-      <button id="ghostToggleBtn" class="meta-pill-btn flex items-center gap-1.5 text-xs font-medium px-3.5 py-1.5 rounded-full transition cursor-pointer" title="Toggle Perspective Holographic Blueprint">
-        <span>👻</span> <span id="ghostToggleText">Ghost Blueprint: OFF</span>
-      </button>
-
-      <!-- Reset Workflow -->
-      <button id="resetWorkflowBtn" class="meta-pill-btn p-1.5 rounded-full text-xs hover:bg-slate-800 transition text-slate-400 hover:text-white cursor-pointer" title="Reset Workflow">
-        ↺
-      </button>
-
       <!-- Connection Status Badge -->
-      <div id="connectionStatus" class="flex items-center gap-2 text-xs px-3.5 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-medium">
-        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+      <div id="connectionStatus" class="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
         Stream Active
       </div>
     </div>
   </header>
 
-  <!-- Open-Vocabulary Target Concept Bar (Meta AI Prompt Bar) -->
-  <div class="bg-[#080d1a]/60 border-b border-blue-500/15 px-6 py-2.5 flex flex-wrap items-center justify-between gap-4 text-xs backdrop-blur-md">
-    <div class="flex items-center gap-2.5 flex-1 max-w-2xl min-w-[320px]">
-      <span class="text-cyan-400 font-mono font-semibold flex items-center gap-1.5 shrink-0 text-[11px]">
-        <span class="w-2 h-2 rounded-full bg-cyan-400"></span> SAM 3.1 Prompt:
-      </span>
-      <div class="relative flex-1">
-        <input type="text" id="customPromptInput" placeholder="Auto (Step Milestone Components)" 
-               class="w-full bg-slate-950/80 border border-blue-500/25 rounded-full px-3.5 py-1.5 text-slate-200 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 placeholder:text-slate-500 shadow-inner">
-      </div>
-      <button id="clearPromptBtn" class="text-slate-400 hover:text-white px-2 py-1 rounded-full hover:bg-slate-800 text-xs transition" title="Reset to Milestone Components">✕</button>
-    </div>
+  <!-- Monolithic Main Studio Workspace -->
+  <main class="flex-1 flex flex-col lg:flex-row w-full overflow-hidden">
     
-    <!-- Horizon Quick Presets Chips -->
-    <div class="flex items-center gap-1.5 overflow-x-auto">
-      <span class="text-slate-400 text-[11px] font-medium shrink-0">Presets:</span>
-      <button class="preset-btn meta-pill-btn px-3 py-1 rounded-full text-[11px] font-mono cursor-pointer" data-prompt="">⚡ Active Step</button>
-      <button class="preset-btn meta-pill-btn px-3 py-1 rounded-full text-[11px] font-mono cursor-pointer" data-prompt="microcontroller, chip, pcb, header pins, socket">🔌 Hardware / ICs</button>
-      <button class="preset-btn meta-pill-btn px-3 py-1 rounded-full text-[11px] font-mono cursor-pointer" data-prompt="breadboard, resistor, capacitor, led, jumper wire">🔬 Breadboard & Parts</button>
-      <button class="preset-btn meta-pill-btn px-3 py-1 rounded-full text-[11px] font-mono cursor-pointer" data-prompt="human hand, tweezers, screwdriver, wire, pliers">🖐️ Hands & Tools</button>
-      <button class="preset-btn meta-pill-btn px-3 py-1 rounded-full text-[11px] font-mono cursor-pointer" data-prompt="coffee mug, pen, notebook, smartphone, keyboard">☕ Desk Objects</button>
-    </div>
-  </div>
-
-  <!-- Main Spatial Grid Layout -->
-  <main class="flex-1 p-6 grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-7xl mx-auto w-full">
-    
-    <!-- Spatial Viewport & AR Canvas HUD -->
-    <div class="lg:col-span-2 flex flex-col spatial-viewport-frame meta-glass-panel">
-      <!-- Reticle Corner Accents -->
-      <div class="hud-corner hud-corner-tl"></div>
-      <div class="hud-corner hud-corner-tr"></div>
-      <div class="hud-corner hud-corner-bl"></div>
-      <div class="hud-corner hud-corner-br"></div>
-
-      <!-- Top Telemetry Header -->
-      <div class="px-4 py-2.5 border-b border-blue-500/20 flex items-center justify-between bg-slate-950/60 text-xs text-slate-400">
+    <!-- Left Studio Stage: Optical AR Viewport -->
+    <section class="flex-1 flex flex-col bg-[#070A10] border-b lg:border-b-0 lg:border-r border-white/[0.08] relative min-h-[500px]">
+      
+      <!-- Studio Viewport Telemetry Header Bar -->
+      <div class="px-4 py-2 border-b border-white/[0.06] bg-[#0E131F]/60 flex items-center justify-between text-xs text-slate-400 shrink-0">
         <div class="flex items-center gap-2.5">
-          <span class="font-mono text-cyan-400 font-bold tracking-wider flex items-center gap-1">
-            <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping"></span> SPATIAL HUD
+          <span class="font-mono text-cyan-400 font-semibold tracking-wider flex items-center gap-1.5 text-[11px]">
+            <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span> SPATIAL VIEWPORT
           </span>
           <span class="text-slate-600">|</span>
-          <span id="feedModeLabel" class="font-mono text-slate-200 text-[11px]">DEMO FEED: ESP32 IC</span>
+          <span id="feedModeLabel" class="font-mono text-slate-300 text-[11px]">DEMO FEED: ESP32 IC</span>
         </div>
-        <div class="flex items-center gap-4 text-[11px]">
-          <span id="streamLatencyBadge" class="font-mono text-slate-300">Latency: ~180ms</span>
-          <span id="fpsCounter" class="font-mono text-emerald-400 font-semibold">FPS: --</span>
+        <div class="flex items-center gap-3.5 text-[11px]">
+          <span id="streamLatencyBadge" class="font-mono text-slate-400">Latency: ~180ms</span>
+          <span id="fpsCounter" class="font-mono text-emerald-400 font-semibold">FPS: 60</span>
         </div>
       </div>
 
       <!-- Viewport Canvas & Video Layer -->
-      <div class="relative flex-1 bg-black flex items-center justify-center overflow-hidden min-h-[460px]">
+      <div class="relative flex-1 bg-[#070A10] flex items-center justify-center overflow-hidden">
+        <!-- Reticle Corner Accents -->
+        <div class="hud-corner hud-corner-tl"></div>
+        <div class="hud-corner hud-corner-tr"></div>
+        <div class="hud-corner hud-corner-bl"></div>
+        <div class="hud-corner hud-corner-br"></div>
+
         <video id="webcamVideo" autoplay playsinline muted class="absolute inset-0 w-full h-full object-contain hidden"></video>
         <canvas id="overlayCanvas" class="absolute inset-0 w-full h-full object-contain"></canvas>
         <div id="cameraPlaceholder" class="hidden text-center p-6 z-10">
-          <div class="w-16 h-16 rounded-full bg-slate-900 border border-blue-500/30 flex items-center justify-center mx-auto mb-3 text-cyan-400 text-2xl shadow-lg shadow-blue-500/20">📷</div>
-          <p class="text-sm font-semibold text-slate-200">Camera is in standby</p>
-          <p class="text-xs text-slate-500 mt-1">Switch feed or check device permissions</p>
+          <div class="w-12 h-12 rounded-full bg-slate-900 border border-slate-700 flex items-center justify-center mx-auto mb-2 text-cyan-400 text-xl">📷</div>
+          <p class="text-xs font-semibold text-slate-300">Camera standby</p>
+          <p class="text-[11px] text-slate-500">Switch feed or check device permissions</p>
         </div>
+
+        <!-- Floating Spatial Ornament Toolbar -->
+        <nav class="spatial-ornament" aria-label="HUD Spatial Controls">
+          <!-- Verify Action Button -->
+          <button id="verifyBtn" class="meta-btn-primary flex items-center gap-1.5 text-xs font-semibold px-4 py-1.5 rounded-full transition cursor-pointer shadow-md">
+            <span id="verifyBtnIcon" class="w-2 h-2 rounded-full bg-cyan-300 animate-pulse"></span> Verify Step <span class="hidden sm:inline opacity-70 text-[10px] font-mono tracking-tight">[Space]</span>
+          </button>
+
+          <!-- Step Navigation Pill -->
+          <div class="flex items-center bg-slate-900/80 rounded-full p-0.5 border border-white/[0.1] text-xs">
+            <button id="prevStepBtn" title="Previous Step" class="px-2 py-1 text-slate-300 hover:text-white hover:bg-white/[0.08] rounded-full transition">◀</button>
+            <span id="stepCounterIndicator" class="px-2 text-xs font-mono text-cyan-300 font-semibold">1/3</span>
+            <button id="nextStepBtn" title="Next Step" class="px-2 py-1 text-slate-300 hover:text-white hover:bg-white/[0.08] rounded-full transition">▶</button>
+          </div>
+
+          <!-- Ghost Overlay Toggle -->
+          <button id="ghostToggleBtn" class="meta-pill-btn flex items-center gap-1.5 text-xs font-medium px-3.5 py-1.5 rounded-full transition cursor-pointer" title="Toggle Perspective Holographic Blueprint">
+            <span class="w-2 h-2 rounded-full bg-purple-400"></span> <span id="ghostToggleText">Ghost Blueprint: OFF</span>
+          </button>
+
+          <!-- Reset Workflow -->
+          <button id="resetWorkflowBtn" class="meta-pill-btn p-1.5 rounded-full text-xs hover:bg-white/[0.08] transition text-slate-400 hover:text-white cursor-pointer" title="Reset Workflow">
+            ↺
+          </button>
+        </nav>
       </div>
 
-      <!-- Bottom Object Legend & Dual-Loop Pipeline Status -->
-      <div class="px-4 py-3 bg-slate-950/90 border-t border-blue-500/20 flex items-center justify-between text-xs overflow-x-auto" id="legendContainer">
+      <!-- Bottom Object Legend Flush Bar -->
+      <div class="px-4 py-2.5 bg-[#0E131F]/90 border-t border-white/[0.06] flex items-center justify-between text-xs overflow-x-auto shrink-0" id="legendContainer">
         <div class="flex items-center gap-4" id="segmentsLegend">
           <span class="text-slate-400 font-medium text-[11px]">Active SAM 3.1 Targets:</span>
           <div class="flex items-center gap-2">
-            <span class="w-2.5 h-2.5 rounded-full bg-blue-500 animate-ping"></span>
+            <span class="w-2 h-2 rounded-full bg-blue-400"></span>
             <span class="text-slate-300 font-mono text-[11px]">microcontroller_chip (96%)</span>
           </div>
           <div class="flex items-center gap-2">
-            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
             <span class="text-slate-300 font-mono text-[11px]">socket_u1 (94%)</span>
           </div>
         </div>
-        <div class="text-[11px] text-cyan-400/80 font-mono hidden sm:flex items-center gap-1.5">
-          <span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+        <div class="text-[11px] text-slate-400 font-mono hidden sm:flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-[#0866FF]"></span>
           Dual-Loop: Vision 5FPS | Muse Spark On-Demand
         </div>
       </div>
-    </div>
+    </section>
 
-    <!-- Copilot Sidebar: Steps & Physical AI Reasoning -->
-    <div class="flex flex-col space-y-6">
+    <!-- Right Studio Pane: Unified Inspector & Copilot Panel -->
+    <aside class="w-full lg:w-[380px] xl:w-[420px] bg-[#111622] flex flex-col overflow-y-auto shrink-0 divide-y divide-white/[0.06]">
       
-      <!-- Active Assembly Milestone Card -->
-      <div class="meta-glass-panel rounded-2xl p-5 relative overflow-hidden">
-        <div class="flex items-center justify-between mb-3.5">
-          <span class="text-xs font-bold tracking-wider text-cyan-400 uppercase flex items-center gap-1.5">
-            <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span> Assembly Milestone
+      <!-- Section 1: Active Assembly Milestone & Reasoning -->
+      <div class="p-5 space-y-3.5">
+        <div class="flex items-center justify-between">
+          <span class="text-[11px] font-bold tracking-wider text-slate-400 uppercase font-mono flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-[#0866FF]"></span> Active Milestone
           </span>
-          <span id="stepBadge" class="text-[11px] px-3 py-0.5 rounded-full bg-blue-500/20 text-cyan-300 border border-blue-500/35 font-mono font-medium">Step 1 of 3</span>
+          <span id="stepBadge" class="text-[11px] px-2.5 py-0.5 rounded-md bg-white/[0.06] text-slate-300 border border-white/[0.08] font-mono font-medium">Step 1 of 3</span>
         </div>
-        <h2 id="stepTitle" class="text-lg font-bold text-white mb-1.5 tracking-tight">Mount Main IC Chip</h2>
-        <p id="stepDescription" class="text-xs text-slate-300 leading-relaxed mb-4">
-          Place the microcontroller into socket U1, ensuring pin 1 notch faces upwards.
-        </p>
+        <div>
+          <h2 id="stepTitle" class="text-base font-bold text-white tracking-tight">Mount Main IC Chip</h2>
+          <p id="stepDescription" class="text-xs text-slate-300 leading-relaxed mt-1">
+            Place the microcontroller into socket U1, ensuring pin 1 notch faces upwards.
+          </p>
+        </div>
 
         <!-- Verification Status Box -->
-        <div id="verificationBox" class="p-4 rounded-xl bg-slate-900/80 border border-blue-500/25 transition-all duration-300">
-          <div class="flex items-center justify-between mb-2">
+        <div id="verificationBox" class="p-3.5 rounded-lg bg-slate-900/90 border border-white/[0.08] transition-all duration-200">
+          <div class="flex items-center justify-between mb-1.5">
             <span class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-              <span>🧠</span> Muse Spark Reasoning
+              <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span> Muse Spark
+              <div id="aiWaveform" class="ai-waveform-container ml-1.5">
+                <span class="ai-waveform-bar"></span>
+                <span class="ai-waveform-bar"></span>
+                <span class="ai-waveform-bar"></span>
+                <span class="ai-waveform-bar"></span>
+                <span class="ai-waveform-bar"></span>
+              </div>
             </span>
             <span id="verificationStatus" class="text-xs font-bold text-emerald-400 flex items-center gap-1 font-mono">
               ✓ Verified (96%)
             </span>
           </div>
-          <p id="verificationFeedback" class="text-xs text-slate-300 leading-relaxed">
+          <p id="verificationFeedback" class="text-xs text-slate-400 leading-relaxed">
             Microcontroller seated properly in socket U1. Orientation notch faces upward.
           </p>
         </div>
       </div>
 
-      <!-- Muse Image Synthesized Target Blueprint -->
-      <div class="meta-glass-panel rounded-2xl p-5 flex-1 flex flex-col relative overflow-hidden">
-        <div class="flex items-center justify-between mb-3.5">
-          <span class="text-xs font-bold tracking-wider text-purple-400 uppercase flex items-center gap-1.5">
-            <span>🎨</span> Target Perspective Blueprint
+      <!-- Section 2: Target Perspective Blueprint -->
+      <div class="p-5 space-y-3">
+        <div class="flex items-center justify-between">
+          <span class="text-[11px] font-bold tracking-wider text-slate-400 uppercase font-mono flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span> Perspective Blueprint
           </span>
-          <span class="text-[10px] px-2.5 py-0.5 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30 font-mono">
+          <span class="text-[10px] px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20 font-mono">
             Muse Synthesized
           </span>
         </div>
         
-        <div class="flex-1 bg-slate-950/90 border border-blue-500/20 rounded-xl overflow-hidden relative flex items-center justify-center p-2.5 min-h-[190px] hologram-grid-bg">
+        <div class="bg-slate-950/90 border border-white/[0.08] rounded-lg overflow-hidden relative flex items-center justify-center p-2 min-h-[170px] hologram-grid-bg">
           <div id="targetImageContainer" class="w-full h-full flex items-center justify-center">
-            <img id="targetBlueprintImg" src="" alt="Muse Image Target Blueprint" class="w-full h-full object-contain rounded-lg drop-shadow-md">
+            <img id="targetBlueprintImg" src="" alt="Muse Target Blueprint" class="w-full h-full object-contain rounded drop-shadow">
           </div>
         </div>
 
-        <div class="mt-4">
-          <button id="alignGhostBtn" class="w-full meta-pill-btn bg-purple-600/15 hover:bg-purple-600/25 text-purple-300 border border-purple-500/35 text-xs font-semibold py-2 rounded-full transition text-center cursor-pointer flex items-center justify-center gap-1.5">
-            <span>👻</span> Project Blueprint onto Live HUD
-          </button>
+        <button id="alignGhostBtn" class="w-full meta-pill-btn text-xs font-semibold py-2 rounded-lg transition text-center cursor-pointer flex items-center justify-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span> Project Blueprint onto Live HUD
+        </button>
+      </div>
+
+      <!-- Section 3: SAM 3.1 Target Concept & Presets -->
+      <div class="p-5 space-y-3">
+        <div class="flex items-center justify-between">
+          <span class="text-[11px] font-bold tracking-wider text-slate-400 uppercase font-mono flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span> SAM 3.1 Prompt
+          </span>
+          <button id="generateTaskBtn" class="text-[10px] font-semibold text-cyan-300 hover:text-cyan-200 transition font-mono cursor-pointer" title="Generate 3-Step Procedure with Muse Spark">✨ Generate Steps</button>
+        </div>
+
+        <div class="relative">
+          <input type="text" id="customPromptInput" placeholder="Auto (Step Milestone Components)" 
+                 class="w-full bg-slate-950/80 border border-white/[0.1] rounded-lg px-3 py-1.5 text-slate-200 text-xs font-mono focus:outline-none focus:border-[#0866FF] placeholder:text-slate-500 pr-14">
+          <button id="clearPromptBtn" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white px-1.5 text-xs transition" title="Reset">✕</button>
+          <span id="promptFeedbackSpinner" class="hidden absolute right-8 top-1/2 -translate-y-1/2 text-[10px] font-mono text-cyan-400 animate-pulse">Detecting...</span>
+        </div>
+
+        <!-- Presets -->
+        <div class="space-y-1.5">
+          <span class="text-[10px] text-slate-500 font-mono uppercase tracking-wider">Concept Presets:</span>
+          <div class="flex flex-wrap gap-1.5">
+            <button class="preset-btn meta-pill-btn px-2.5 py-1 rounded-md text-[11px] font-mono cursor-pointer flex items-center gap-1" data-prompt="">
+              Active Step
+            </button>
+            <button class="preset-btn meta-pill-btn px-2.5 py-1 rounded-md text-[11px] font-mono cursor-pointer flex items-center gap-1" data-prompt="microcontroller, chip, pcb, header pins, socket">
+              ICs &amp; PCB
+            </button>
+            <button class="preset-btn meta-pill-btn px-2.5 py-1 rounded-md text-[11px] font-mono cursor-pointer flex items-center gap-1" data-prompt="breadboard, resistor, capacitor, led, jumper wire">
+              Passives
+            </button>
+            <button class="preset-btn meta-pill-btn px-2.5 py-1 rounded-md text-[11px] font-mono cursor-pointer flex items-center gap-1" data-prompt="human hand, tweezers, screwdriver, wire, pliers">
+              Tools
+            </button>
+            <button class="preset-btn meta-pill-btn px-2.5 py-1 rounded-md text-[11px] font-mono cursor-pointer flex items-center gap-1" data-prompt="coffee mug, pen, notebook, smartphone, keyboard">
+              Objects
+            </button>
+          </div>
         </div>
       </div>
 
-    </div>
+    </aside>
   </main>
 
   <script src="demo_clips.js"></script>

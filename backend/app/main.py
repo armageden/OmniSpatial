@@ -1,6 +1,7 @@
 import json
 import asyncio
 import logging
+from contextlib import asynccontextmanager
 from typing import Optional, Dict, Any
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,7 +14,12 @@ from app.schemas.models import TargetImageResponse, StreamActionRequest, FrameAn
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("omnispatial")
 
-app = FastAPI(title=settings.app_name, debug=settings.debug)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    await meta_client.close()
+
+app = FastAPI(title=settings.app_name, debug=settings.debug, lifespan=lifespan)
 
 _cors_origins = [o.strip() for o in settings.cors_allowed_origins.split(",") if o.strip()]
 app.add_middleware(
@@ -69,17 +75,20 @@ async def execute_action(request: StreamActionRequest):
         active = reasoning_engine.reset_workflow()
     elif request.action == "set_step":
         active = reasoning_engine.set_step(request.step_number or 1)
+    elif request.action == "set_workflow":
+        active = await reasoning_engine.load_custom_workflow(request.task_goal or "")
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported action: {request.action}")
-    return {"status": "ok", "active_step": active.model_dump()}
+    return {"status": "ok", "active_step": active.model_dump(), "steps": [s.model_dump() for s in reasoning_engine.steps]}
 
 @app.get("/api/steps/{step_number}/target-image", response_model=TargetImageResponse)
-async def get_target_image(step_number: int):
-    if step_number < 1 or step_number > len(reasoning_engine.steps):
-        raise HTTPException(status_code=404, detail="Step not found")
-    step = reasoning_engine.steps[step_number - 1]
-    prompt = f"Perspective engineering diagram of circuit board: {step.title}. {step.description}"
-    was_cached = meta_client.is_target_image_cached(step_number)
+async def get_target_image(step_number: int, prompt: Optional[str] = None):
+    if not prompt:
+        if step_number < 1 or step_number > len(reasoning_engine.steps):
+            raise HTTPException(status_code=404, detail="Step not found")
+        step = reasoning_engine.steps[step_number - 1]
+        prompt = f"Perspective engineering diagram of circuit board: {step.title}. {step.description}"
+    was_cached = meta_client.is_target_image_cached(step_number, prompt=prompt)
     image_url = await meta_client.generate_target_image_muse(prompt, step_number=step_number)
     return TargetImageResponse(
         step_number=step_number,
@@ -105,13 +114,14 @@ async def websocket_stream_endpoint(websocket: WebSocket):
     verification_task: Optional[asyncio.Task] = None
     last_verify_time: float = 0.0
 
-    async def run_async_verification(segments, spatial_relations, auto_advance: bool):
+    async def run_async_verification(segments, spatial_relations, auto_advance: bool, image_base64: str = ""):
         try:
             logger.info("Dispatching async Muse Spark verification...")
             verification = await reasoning_engine.verify_step(
                 segments=segments,
                 spatial_relations=spatial_relations,
-                auto_advance=auto_advance
+                auto_advance=auto_advance,
+                image_base64=image_base64
             )
             update_payload = {
                 "type": "verification_result",
@@ -128,7 +138,7 @@ async def websocket_stream_endpoint(websocket: WebSocket):
     try:
         while True:
             data_text = await websocket.receive_text()
-            if len(data_text) > 1_000_000:
+            if len(data_text) > 3_000_000:
                 await websocket.send_json({"type": "error", "message": "message too large"})
                 continue
             try:
@@ -142,7 +152,7 @@ async def websocket_stream_endpoint(websocket: WebSocket):
 
             action = payload.get("action")
             # Handle control actions
-            if action in ("next_step", "prev_step", "reset_workflow", "set_step"):
+            if action in ("next_step", "prev_step", "reset_workflow", "set_step", "set_workflow"):
                 try:
                     action_req = StreamActionRequest.model_validate(payload)
                 except Exception as val_err:
@@ -166,6 +176,14 @@ async def websocket_stream_endpoint(websocket: WebSocket):
                     active = reasoning_engine.set_step(num)
                     await websocket.send_json({"type": "step_updated", "active_step": active.model_dump()})
                     continue
+                elif action_req.action == "set_workflow":
+                    active = await reasoning_engine.load_custom_workflow(action_req.task_goal or "")
+                    await websocket.send_json({
+                        "type": "step_updated",
+                        "active_step": active.model_dump(),
+                        "steps": [s.model_dump() for s in reasoning_engine.steps]
+                    })
+                    continue
 
             # Validate frame analysis request
             try:
@@ -185,7 +203,7 @@ async def websocket_stream_endpoint(websocket: WebSocket):
 
             if not image_base64:
                 continue
-            if len(image_base64) > 500_000:
+            if len(image_base64) > 2_500_000:
                 await websocket.send_json({"type": "error", "message": "image payload too large"})
                 continue
 
@@ -195,8 +213,11 @@ async def websocket_stream_endpoint(websocket: WebSocket):
                 target_label = str(custom_prompt).strip()
                 target_components = [t.strip() for t in target_label.split(",") if t.strip()]
             else:
-                target_label = f"circuit board, {', '.join(active_step.target_components)}, parts, pins"
                 target_components = active_step.target_components
+                clean_terms = [c.replace("_", " ") for c in target_components]
+                target_label = ", ".join(clean_terms)
+
+            force_mock = bool(frame_req.feed_mode and frame_req.feed_mode.startswith("demo") and not custom_prompt)
 
             # 1. Fast Vision Loop: SAM 3.1 & Spatial Geometry
             segments = await sam_service.process_frame(
@@ -207,7 +228,8 @@ async def websocket_stream_endpoint(websocket: WebSocket):
                 smooth=smooth,
                 target_label=target_label,
                 target_components=target_components,
-                allow_fallback=allow_fallback
+                allow_fallback=allow_fallback,
+                force_mock=force_mock
             )
 
             # 2. Compute spatial topology & vectors
@@ -223,7 +245,8 @@ async def websocket_stream_endpoint(websocket: WebSocket):
                             run_async_verification(
                                 segments=segments,
                                 spatial_relations=spatial_relations,
-                                auto_advance=bool(payload.get("auto_advance", False))
+                                auto_advance=bool(payload.get("auto_advance", False)),
+                                image_base64=image_base64
                             )
                         )
 

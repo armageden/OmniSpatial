@@ -63,11 +63,13 @@ Inbound stream data container sent from client over WebSocket:
 - `trigger_verify` (`bool`): Boolean flag triggering asynchronous Muse Spark evaluation.
 - `custom_prompt` (`Optional[str]`): Open-vocabulary concept segmentation prompt overriding milestone defaults.
 - `allow_fallback` (`bool`): Boolean allowing graceful mock fallback on network degradation (default `False`).
+- `feed_mode` (`Optional[str]`): Input stream mode (e.g. `"camera"`, `"demo_esp32"`, `"demo_cap"`, `"demo_header"`).
 
 ### 7. `StreamActionRequest`
 Explicit control payload sent via WebSocket:
-- `action` (`str`): One of `"verify_step"`, `"next_step"`, `"prev_step"`, `"reset_workflow"`, `"set_step"`.
+- `action` (`str`): One of `"verify_step"`, `"next_step"`, `"prev_step"`, `"reset_workflow"`, `"set_step"`, `"set_workflow"`.
 - `step_number` (`Optional[int]`): Optional step target index.
+- `task_goal` (`Optional[str]`): Optional custom physical task goal for dynamic 3-step procedure synthesis.
 
 ### 8. `TargetImageResponse`
 Response containing perspective synthesized blueprint from Muse Image:

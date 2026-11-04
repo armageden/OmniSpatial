@@ -10,9 +10,9 @@ The `ReasoningEngine` acts as the procedural state machine for physical tasks. I
 
 ## Default Task Steps (`DEFAULT_STEPS`)
 The engine is preconfigured with a 3-step electronics assembly workflow:
-1. **Step 1:** "Mount Main IC Chip" (`microcontroller_chip`)
-2. **Step 2:** "Position Decoupling Capacitor C1" (`decoupling_capacitor_c1`)
-3. **Step 3:** "Solder Header Pins" (`uart_header`)
+1. **Step 1:** "Mount Main IC Chip" (`microcontroller_chip`, `socket_u1`)
+2. **Step 2:** "Position Decoupling Capacitor C1" (`decoupling_capacitor_c1`, `pads_c1`)
+3. **Step 3:** "Solder Header Pins" (`uart_header`, `pads_j1`)
 
 ## Class: `ReasoningEngine`
 
@@ -38,15 +38,19 @@ Resets all steps and returns active pointer to Step 1.
 #### 5. `set_step(step_number: int) -> TaskStep`
 Jumps directly to a specific 1-indexed step.
 
-#### 6. `verify_step(segments: List[SegmentedObject], spatial_relations: Dict[str, Any], auto_advance: bool = False) -> VerificationResult`
+#### 6. `load_custom_workflow(task_goal: str) -> TaskStep`
+Calls `meta_client.generate_task_steps_muse_spark(task_goal)` to dynamically replace `self.steps` with a 3-step procedure tailored to `task_goal` and resets the active pointer to Step 1.
+
+#### 7. `verify_step(segments: List[SegmentedObject], spatial_relations: Dict[str, Any], auto_advance: bool = False, image_base64: str = "") -> VerificationResult`
 - Assembles a structured prompt containing the active step's criteria, detected segments, and spatial relationships.
-- Calls `meta_client.reason_physical_state_muse_spark(prompt, context)`.
-- If `step_verified == True` and confidence >= 0.85:
+- Calls `meta_client.reason_physical_state_muse_spark(prompt, context, image_base64=...)`.
+- Computes `is_verified = step_verified AND confidence >= 0.85`.
+- If `is_verified == True`:
   - Sets `active_step.status = "verified"`.
   - If `auto_advance == True` and not at final step, increments `self.current_step_idx`.
-- If `step_verified == False`:
+- Otherwise (not verified, or confidence < 0.85):
   - Sets `active_step.status = "failed"`.
-- Caches and returns `VerificationResult`.
+- Caches and returns `VerificationResult` with `is_verified` reflecting the gated value.
 
 ### Singleton Export
 Exports `reasoning_engine = ReasoningEngine()` for use in `backend/app/main.py`.

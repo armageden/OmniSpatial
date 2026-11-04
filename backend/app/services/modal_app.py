@@ -5,12 +5,16 @@ frame preprocessing, and contour extraction on serverless GPUs.
 """
 
 import io
+import os
 import time
 import base64
 import modal
 import numpy as np
 
 app = modal.App("omnispatial-meta-hackathon")
+
+# Optional GPU allocation (e.g. MODAL_GPU=T4 once card is on file; defaults to None for free CPU tier)
+gpu_type = os.environ.get("MODAL_GPU", None)
 
 # Define container image with PyTorch, OpenCV, pycocotools and SAM dependencies
 image = (
@@ -22,12 +26,14 @@ image = (
         "pillow",
         "opencv-python-headless",
         "httpx",
-        "pycocotools"
+        "pycocotools",
+        "meta-sam-parser"
     )
 )
 
 @app.function(
     image=image,
+    gpu=gpu_type,
     timeout=60,
     scaledown_window=120
 )
@@ -40,7 +46,6 @@ def process_frame_gpu(image_bytes: bytes, target_label: str = "components") -> d
     - Benchmarks hardware execution latency
     """
     import cv2
-    from PIL import Image
 
     start_time = time.time()
     nparr = np.frombuffer(image_bytes, np.uint8)
@@ -97,7 +102,8 @@ def api_process_frame(payload: dict):
         raw_bytes = base64.b64decode(image_base64, validate=True)
     except Exception:
         return {"error": "invalid base64"}
-    return process_frame_gpu.local(raw_bytes, target_label=target_label)
+    dispatcher = getattr(process_frame_gpu, "remote", process_frame_gpu.local)
+    return dispatcher(raw_bytes, target_label=target_label)
 
 @app.function(image=image)
 @modal.fastapi_endpoint(method="GET")
@@ -105,6 +111,6 @@ def health():
     return {
         "status": "online",
         "provider": "Modal",
-        "service": "OmniSpatial GPU Pipeline",
-        "gpu_enabled": False
+        "service": "OmniSpatial Pipeline",
+        "gpu_enabled": bool(gpu_type)
     }

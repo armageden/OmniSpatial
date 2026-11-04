@@ -1,4 +1,4 @@
-PYTHON ?= $(shell if [ -f backend/.venv/bin/python ]; then echo backend/.venv/bin/python; else echo python3; fi)
+PYTHON ?= $(shell if [ -f .venv/bin/python ]; then echo .venv/bin/python; elif [ -f backend/.venv/bin/python ]; then echo backend/.venv/bin/python; else echo python3; fi)
 
 .PHONY: help docs-check check dev-backend dev-frontend test
 
